@@ -12,7 +12,10 @@ const LetoRegistry = artifacts.require("LetoRegistry")
 const LetoDeployer = artifacts.require("LetoDeployer")
 const LetoToken = artifacts.require("LetoToken")
 const LetoPool = artifacts.require("LetoPool")
+
+// Mocks
 const LetoTokenMock = artifacts.require("LetoTokenMock")
+const AggregatorV3Mock = artifacts.require("AggregatorV3Mock")
 
 const SWAP_ROUTER = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
 const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
@@ -49,21 +52,23 @@ contract("LetoLongStrategy", accounts => {
 		swapRouterContract.setProvider(web3.currentProvider)
 		const swapRouter = await swapRouterContract.at(SWAP_ROUTER)
 
-		const res = await swapRouter.exactInputSingle(
-			{
-				tokenIn: WETH,
-				tokenOut: USDC,
-				fee: 3000,
-				recipient: pool_owner,
-				deadline: Math.round((new Date()).getTime() / 10 ** 3) + 1000,
-				amountIn: web3.utils.toWei("10", "ether"),
-				amountOutMinimum: 0,
-				sqrtPriceLimitX96: 0,
-			}, {
+		for (let i = 0; i < 3; i++) {
+			await swapRouter.exactInputSingle(
+				{
+					tokenIn: WETH,
+					tokenOut: USDC,
+					fee: 3000,
+					recipient: accounts[i],
+					deadline: Math.round((new Date()).getTime() / 10 ** 3) + 1000,
+					amountIn: web3.utils.toWei("10", "ether"),
+					amountOutMinimum: 0,
+					sqrtPriceLimitX96: 0,
+				}, {
 				from: pool_owner,
 				value: web3.utils.toWei("10", "ether")
 			}
-		);
+			);
+		}
 
 		asset0 = await LetoToken.at(USDC)
 		asset1 = await LetoToken.at(WETH)
@@ -88,7 +93,7 @@ contract("LetoLongStrategy", accounts => {
 			strategyAdapter.address,
 			poolToken.address,
 			asset0.address, asset1.address,
-			2,
+			20000, // decimals 10 ^ 4
 			price, "USDC",
 			lendingMarketAdapter.address, exchangeAdapter.address,
 			initialDeposit
@@ -98,57 +103,131 @@ contract("LetoLongStrategy", accounts => {
 
 		pool = await LetoPool.at(poolAddress)
 
-		console.log("Initial state");
+		console.log("Initial state")
 
-		console.log("deposited", (await strategyAdapter.deposited.call(poolAddress)).div(decimals1).toString())
+		let poolState = await strategyAdapter.poolState.call(poolAddress)
+
+		console.log("USDC Balance", poolState.balance0)
+		console.log("WETH Balance", poolState.balance1)
+		console.log("deposited", poolState.deposited)
+		console.log("borrowed", poolState.borrowed)
+		console.log("netValue", poolState.netValue)
+		console.log("leverage", poolState.leverage)
+		console.log("ltv", (await pool.ltv.call()).toString())
 		console.log("availableBorrows", (await lendingMarketAdapter.availableBorrows.call(lendingMarketAdapter.address)).toString())
-		console.log("latestPairPrice", (await pool.latestPairPrice.call()).div(decimals1).toString())
-		console.log("borrowed", (await lendingMarketAdapter.borrowed.call(lendingMarketAdapter.address)).toString())
-		console.log("balanceOf USDC", (await asset0.balanceOf.call(poolAddress)).div(decimals0).toString())
-		console.log("balanceOf WETH", (await asset1.balanceOf.call(poolAddress)).div(decimals1).toString())
-		console.log("leverage", (await strategyAdapter.leverage.call(poolAddress)).toString())
+		console.log("maxWithdrawal", (await pool.calculateMaxWithdrawal.call()).toString())
+		console.log("latestPairPrice", (await pool.latestPairPrice.call()).toString())
 
-		await strategyAdapter.rebalance(poolAddress)
+		for (let i = 0; i < 3; i++) {
+			await strategyAdapter.rebalance(poolAddress)
 
-		console.log("\n After first rebalancing \n");
+			poolState = await strategyAdapter.poolState.call(poolAddress)
 
-		console.log("deposited", (await strategyAdapter.deposited.call(poolAddress)).div(decimals1).toString())
-		console.log("availableBorrows", (await lendingMarketAdapter.availableBorrows.call(lendingMarketAdapter.address)).toString())
-		console.log("latestPairPrice", (await pool.latestPairPrice.call()).div(decimals1).toString())
-		console.log("borrowed", (await lendingMarketAdapter.borrowed.call(lendingMarketAdapter.address)).toString())
-		console.log("balanceOf USDC", (await asset0.balanceOf.call(poolAddress)).div(decimals0).toString())
-		console.log("balanceOf WETH", (await asset1.balanceOf.call(poolAddress)).div(decimals1).toString())
-		console.log("leverage", (await strategyAdapter.leverage.call(poolAddress)).toString())
+			console.log(`\n Rebalancing ${i} \n`)
 
-		await strategyAdapter.rebalance(poolAddress)
+			console.log("USDC Balance", poolState.balance0)
+			console.log("WETH Balance", poolState.balance1)
+			console.log("deposited", poolState.deposited)
+			console.log("borrowed", poolState.borrowed)
+			console.log("netValue", poolState.netValue)
+			console.log("leverage", poolState.leverage)
+			console.log("ltv", (await pool.ltv.call()).toString())
+			console.log("availableBorrows", (await lendingMarketAdapter.availableBorrows.call(lendingMarketAdapter.address)).toString())
+			console.log("maxWithdrawal", (await pool.calculateMaxWithdrawal.call()).toString())
+			console.log("latestPairPrice", (await pool.latestPairPrice.call()).toString())
+		}
 
-		console.log("\n After second rebalancing \n");
+		for (let i = 0; i < 2; i++) {
+			const depoitAmount = (new BN(1000)).mul(decimals0) // 1.000 USDC
+			await asset0.approve(pool.address, depoitAmount, { from: accounts[i + 1] })
+			await pool.deposit(depoitAmount, { from: accounts[i + 1] })
 
-		console.log("deposited", (await strategyAdapter.deposited.call(poolAddress)).div(decimals1).toString())
-		console.log("availableBorrows", (await lendingMarketAdapter.availableBorrows.call(lendingMarketAdapter.address)).toString())
-		console.log("latestPairPrice", (await pool.latestPairPrice.call()).div(decimals1).toString())
-		console.log("borrowed", (await lendingMarketAdapter.borrowed.call(lendingMarketAdapter.address)).toString())
-		console.log("balanceOf USDC", (await asset0.balanceOf.call(poolAddress)).div(decimals0).toString())
-		console.log("balanceOf WETH", (await asset1.balanceOf.call(poolAddress)).div(decimals1).toString())
-		console.log("leverage", (await strategyAdapter.leverage.call(poolAddress)).toString())
+			console.log(`\n Deposit ${i} \n`)
 
-		// const parameters = await pool.parameters()
-		// const poolBalance = await asset0.balanceOf.call(pool.address, { from: pool_owner })
+			poolState = await strategyAdapter.poolState.call(poolAddress)
 
-		// const poolToken = await LetoToken.at(await pool.token())
-		// const deployerBalance = await poolToken.balanceOf.call(deployer.address, { from: pool_owner })
+			console.log(`L-ETHup Balance of account: ${i + 1}`, (await poolToken.balanceOf(accounts[i + 1])).toString())
+			console.log("USDC Balance", poolState.balance0)
+			console.log("WETH Balance", poolState.balance1)
+			console.log("deposited", poolState.deposited)
+			console.log("borrowed", poolState.borrowed)
+			console.log("netValue", poolState.netValue)
+			console.log("leverage", poolState.leverage)
+			console.log("ltv", (await pool.ltv.call()).toString())
+			console.log("availableBorrows", (await lendingMarketAdapter.availableBorrows.call(lendingMarketAdapter.address)).toString())
+			console.log("maxWithdrawal", (await pool.calculateMaxWithdrawal.call()).toString())
+			console.log("latestPairPrice", (await pool.latestPairPrice.call()).toString())
+		}
 
-		// assert.equal(deployerBalance.toString(), initialDeposit.div(price).mul(decimals1).toString())
+		for (let i = 0; i < 3; i++) {
+			await strategyAdapter.rebalance(poolAddress)
 
-		// assert.equal(poolBalance.toString(), initialDeposit.toString())
-		// assert.equal(parameters.asset0, asset0.address)
-		// assert.equal(parameters.asset1, asset1.address)
-		// assert.equal(parameters.name, "L-ETHup")
-		// assert.equal(parameters.symbol, "L-ETHup")
-		// assert.equal(parameters.target_leverage, "2")
-		// assert.equal(parameters.pool_token_price, price)
-		// assert.equal(parameters.bid_token_symbol, 'USDC')
-		// assert.equal(parameters.lending_market_adapter, lendingMarketAdapter.address)
-		// assert.equal(parameters.exchange_adapter, exchangeAdapter.address)
+			poolState = await strategyAdapter.poolState.call(poolAddress)
+
+			console.log(`\n Rebalancing ${i} \n`)
+
+			console.log("USDC Balance", poolState.balance0)
+			console.log("WETH Balance", poolState.balance1)
+			console.log("deposited", poolState.deposited)
+			console.log("borrowed", poolState.borrowed)
+			console.log("netValue", poolState.netValue)
+			console.log("leverage", poolState.leverage)
+			console.log("ltv", (await pool.ltv.call()).toString())
+			console.log("availableBorrows", (await lendingMarketAdapter.availableBorrows.call(lendingMarketAdapter.address)).toString())
+			console.log("maxWithdrawal", (await pool.calculateMaxWithdrawal.call()).toString())
+			console.log("latestPairPrice", (await pool.latestPairPrice.call()).toString())
+		}
+
+		for (let i = 0; i < 3; i++) {
+			let withdrawalAmount = (new BN(10)).mul(decimalsPool) // 10 L-ETHup
+
+			if (i == 0) {
+				withdrawalAmount = (new BN(20)).mul(decimalsPool) // 30 L-ETHup
+			}
+
+			console.log(`\n Withdrawal ${i} \n`)
+
+			console.log(`USDC Balance of account before withdrawal: ${i}`, (await asset0.balanceOf(accounts[i])).toString())
+			console.log(`L-ETHup Balance of account before withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
+
+			await poolToken.approve(pool.address, withdrawalAmount, { from: accounts[i] })
+			await pool.withdraw(withdrawalAmount, { from: accounts[i] })
+
+			poolState = await strategyAdapter.poolState.call(poolAddress)
+
+			console.log(`USDC Balance of account after withdrawal: ${i}`, (await asset0.balanceOf(accounts[i])).toString())
+			console.log(`L-ETHup Balance of account after withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
+
+			console.log("USDC Balance", poolState.balance0)
+			console.log("WETH Balance", poolState.balance1)
+			console.log("deposited", poolState.deposited)
+			console.log("borrowed", poolState.borrowed)
+			console.log("netValue", poolState.netValue)
+			console.log("leverage", poolState.leverage)
+			console.log("ltv", (await pool.ltv.call()).toString())
+			console.log("availableBorrows", (await lendingMarketAdapter.availableBorrows.call(lendingMarketAdapter.address)).toString())
+			console.log("maxWithdrawal", (await pool.calculateMaxWithdrawal.call()).toString())
+			console.log("latestPairPrice", (await pool.latestPairPrice.call()).toString())
+		}
+
+
+		for (let i = 0; i < 3; i++) {
+			await strategyAdapter.rebalance(poolAddress)
+
+			poolState = await strategyAdapter.poolState.call(poolAddress)
+
+			console.log(`\n Rebalancing ${i} \n`)
+
+			console.log("USDC Balance", poolState.balance0)
+			console.log("WETH Balance", poolState.balance1)
+			console.log("deposited", poolState.deposited)
+			console.log("borrowed", poolState.borrowed)
+			console.log("netValue", poolState.netValue)
+			console.log("leverage", poolState.leverage)
+			console.log("ltv", (await pool.ltv.call()).toString())
+			console.log("availableBorrows", (await lendingMarketAdapter.availableBorrows.call(lendingMarketAdapter.address)).toString())
+			console.log("maxWithdrawal", (await pool.calculateMaxWithdrawal.call()).toString())
+			console.log("latestPairPrice", (await pool.latestPairPrice.call()).toString())
+		}
 	})
 })

@@ -1,11 +1,17 @@
 pragma solidity 0.8.4;
 
 import "./../interfaces/IAaveLendingPool.sol";
+import "./../interfaces/ILetoRegistry.sol";
 import "./../interfaces/ILetoToken.sol";
 
 contract LetoAaveAdapter {
-	// FIXME: get this address from registry
-	IAaveLendingPool lending = IAaveLendingPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
+	ILetoRegistry public registry;
+	IAaveLendingPool public lending;
+
+	constructor(address leto_registry_) {
+		registry = ILetoRegistry(leto_registry_);
+		lending = IAaveLendingPool(registry.getAddress("Aave:LendingPool"));
+	}
 
 	struct AaveUserAccountData {
 		uint256 totalCollateralETH;
@@ -33,8 +39,12 @@ contract LetoAaveAdapter {
 		ILetoToken(asset_).transfer(msg.sender, amount);
 	}
 
-	function repay(address asset, uint256 amount, address onBehalfOf) external {
-		lending.repay(asset, amount, 1, onBehalfOf);
+	function repay(address asset_, uint256 amount, address onBehalfOf) external {
+		ILetoToken asset = ILetoToken(asset_);
+		asset.transferFrom(msg.sender, address(this), amount);
+		asset.approve(address(lending), amount);
+
+		lending.repay(asset_, amount, 1, onBehalfOf);
 	}
 
 	function deposited() external view returns (uint256) {
@@ -47,8 +57,8 @@ contract LetoAaveAdapter {
 		return accountData.ltv;
 	}
 
-	function borrowed(address user) external view returns (uint256) {
-		return ILetoToken(0x619beb58998eD2278e08620f97007e1116D5D25b).balanceOf(user);
+	function borrowed(address asset, address user) external view returns (uint256) {
+		return ILetoToken(asset).balanceOf(user);
 	}
 
 	function availableBorrows(address user) external view returns (uint256) {

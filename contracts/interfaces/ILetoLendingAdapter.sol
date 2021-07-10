@@ -8,5 +8,5 @@ interface ILetoLendingAdapter {
 	function deposited() external view returns (uint256);
 	function ltv(address user) external view returns (uint256);
 	function availableBorrows(address user) external view returns (uint256);
-	function borrowed(address user) external view returns (uint256);
+	function borrowed(address asset, address user) external view returns (uint256);
 }

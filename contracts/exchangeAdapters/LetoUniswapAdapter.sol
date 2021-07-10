@@ -2,10 +2,16 @@ pragma solidity 0.8.4;
 
 import '@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol';
 import "./../interfaces/ILetoToken.sol";
+import "./../interfaces/ILetoRegistry.sol";
 
 contract LetoUniswapAdapter {
-	// FIXME: get this address from registry
-	ISwapRouter public router = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+	ILetoRegistry public registry;
+	ISwapRouter public router;
+
+	constructor(address leto_registry_) {
+		registry = ILetoRegistry(leto_registry_);
+		router = ISwapRouter(registry.getAddress("Uniswap:Router"));
+	}
 
 	event Swap(address asset0, address asset1, uint256 amountIn, uint256 amountOut);
 

@@ -21,7 +21,7 @@ contract LetoPool is LetoPriceConsumer {
 		address asset1;
 		string  name;
 		string  symbol;
-		uint8   target_leverage;
+		uint16  target_leverage;
 		uint256 pool_token_price;
 		string  bid_token_symbol;
 		address lending_market_adapter;
@@ -43,7 +43,7 @@ contract LetoPool is LetoPriceConsumer {
 		address       pool_token_,
 		address       asset0_,
 		address       asset1_,
-		uint8         target_leverage_,
+		uint16        target_leverage_,
 		uint256       pool_token_price_,
 		string memory bid_token_symbol_,
 		address       lending_market_adapter_,
@@ -90,8 +90,6 @@ contract LetoPool is LetoPriceConsumer {
 
 		_initial_pair_price = latestPairPrice();
 
-		// FIXME: get this address from registry
-		ILetoToken(0x030bA81f1c18d280636F32af80b9AAd02Cf0854e).approve(lending_market_adapter_, MAX_INT); // aWETH
 		ILetoToken(asset0_).approve(exchange_adapter_, MAX_INT);
 		ILetoToken(asset1_).approve(exchange_adapter_, MAX_INT);
 		ILetoToken(asset0_).approve(lending_market_adapter_, MAX_INT);
@@ -99,6 +97,10 @@ contract LetoPool is LetoPriceConsumer {
 	}
 
 	// Getters
+
+	function decimals() public view returns (uint8) {
+		return getPriceDecimals(_priceFeed);
+	}
 
 	function latestPairPrice() public view returns (int256) {
 		return getPrice(_priceFeed);
@@ -128,7 +130,7 @@ contract LetoPool is LetoPriceConsumer {
 		return _parameters.asset1;
 	}
 
-	function targetLeverage() public view returns (uint256) {
+	function targetLeverage() public view returns (uint16) {
 		return _parameters.target_leverage;
 	}
 
@@ -156,25 +158,47 @@ contract LetoPool is LetoPriceConsumer {
 		return ILetoLendingAdapter(_parameters.lending_market_adapter);
 	}
 
+	function calculateMaxWithdrawal() public view returns (uint256) {
+		if (ltv() == 0) { return 0; }
+		ILetoStrategyAdapter.PoolState memory poolState = _strategy.poolState(address(this));
+		return poolState.deposited - ((poolState.borrowed * (10 ** 4)) / lendingAdapter().ltv(address(lendingAdapter())));
+	}
+
+	function ltv() public view returns (uint256) {
+		return lendingAdapter().ltv(address(lendingAdapter()));
+	}
+
 	// State changing
 
-	function borrow(address asset, uint256 amount) external {
+	event Repay(address asset, uint256 amount);
+
+	function repay(address asset_, uint256 amount) onlyStrategy external {
+		lendingAdapter().repay(asset_, amount, _parameters.lending_market_adapter);
+		emit Borrow(asset_, amount);
+	}
+
+	event Borrow(address asset, uint256 amount);
+
+	function borrow(address asset, uint256 amount) onlyStrategy external {
 		lendingAdapter().borrow(asset, amount, _parameters.lending_market_adapter);
+		emit Borrow(asset, amount);
 	}
 
 	event DepositToLendingPool(address asset, uint256 amount);
 
-	function depositToLendingPool(address asset, uint256 amount) external {
+	function depositToLendingPool(address asset, uint256 amount) onlyStrategy external {
 		lendingAdapter().deposit(asset, amount, _parameters.lending_market_adapter);
 		emit DepositToLendingPool(asset, amount);
 	}
 
 	event SwapThroughAdapter(address asset0, address asset1, uint256 amountIn, uint256 amountOut);
 
-	function swap(address assetIn, address assetOut, uint256 amountIn, uint256 amountOutMin) external returns (uint256 amountOut) {
+	function swap(address assetIn, address assetOut, uint256 amountIn, uint256 amountOutMin) onlyStrategy external returns (uint256 amountOut) {
 		amountOut = exchangeAdapter().swap(assetIn, assetOut, amountIn, amountOutMin);
 		emit SwapThroughAdapter(assetIn, assetOut, amountIn, amountOut);
 	}
+
+	// Public state changing methods
 
 	event Deposit(address depositer, uint256 amount, uint256 amountIn, uint256 amountOut);
 
@@ -197,25 +221,41 @@ contract LetoPool is LetoPriceConsumer {
 
 	event Withdrawal(address depositer, uint256 amount, uint256 amountIn, uint256 amountOut);
 
-	function withdrawal(uint256 amount_) external returns (uint256) {
+	// TODO: add condition of max withdrawal
+	function withdraw(uint256 amount_) external returns (uint256) {
 		ILetoToken bid_token = ILetoToken(bidToken());
 		ILetoToken pool_token = ILetoToken(token());
+		ILetoToken asset1_ = ILetoToken(asset1());
 
 		require(amount_ > 0, "LetoPool: amount is less then zero");
 		require(_token.allowance(msg.sender, address(this)) >= amount_, "LetoPool: insufficient balance");
 
 		uint256 price_ = (10 ** bid_token.decimals() * 10 ** pool_token.decimals()) / price();
-
 		(uint256 pool_token_amount, uint256 bid_token_amount) = tokenExchangeValues(token(), bidToken(), amount_, price_);
+		uint256 bid_token_balance = bid_token.balanceOf(address(this));
 
-		require(bid_token.balanceOf(address(this)) >= bid_token_amount, "LetoPool: balance of the pool is less than the amount for withdrawal");
+		uint256 amountOut = bid_token_amount;
+
+		if (bid_token_amount > bid_token_balance) {
+			uint256 bid_token_amount_converted = (
+				(bid_token_amount * (10 ** asset1_.decimals())) /
+				((10 ** asset1_.decimals()) / uint256(latestPairPrice())) /
+				(10 ** bid_token.decimals())
+			);
+			lendingAdapter().withdraw(address(asset1_), bid_token_amount_converted, address(this));
+			
+			// FIXME: calculate minimal amount out
+			amountOut = exchangeAdapter().swap(address(asset1()), address(asset0()), bid_token_amount_converted, 0);
+		}
+
+		require(bid_token.balanceOf(address(this)) >= amountOut, "LetoPool: balance of the pool is less than the amount for withdrawal");
 
 		_token.transferFrom(msg.sender, address(this), pool_token_amount);
-		bid_token.transfer(msg.sender, bid_token_amount);
+		bid_token.transfer(msg.sender, amountOut);
 
-		emit Withdrawal(msg.sender, amount_, pool_token_amount, bid_token_amount);
+		emit Withdrawal(msg.sender, amount_, pool_token_amount, amountOut);
 
-		return bid_token_amount;
+		return amountOut;
 	}
 
 	// Internals
@@ -224,7 +264,7 @@ contract LetoPool is LetoPriceConsumer {
 		address tokenA_, address tokenB_,
 		uint256 amountA_, uint256 price_
 	)
-		public
+		internal
 		view
 		returns (uint256 amountA, uint256 amountB)
 	{
@@ -241,5 +281,12 @@ contract LetoPool is LetoPriceConsumer {
 		}
 
 		amountB = (amountA * (10 ** token_b_decimals)) / price_;
+	}
+
+	// Modifiers
+
+	modifier onlyStrategy() {
+		require(msg.sender == address(_strategy));
+		_;
 	}
 }

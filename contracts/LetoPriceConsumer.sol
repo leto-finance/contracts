@@ -21,7 +21,7 @@ contract LetoPriceConsumer {
 	/**
    * @notice represents the number of decimals the aggregator responses represent.
    */
-	function getPriceDecimals(address aggregator) internal view returns (uint8) {
+	function getPriceDecimals(address aggregator) public view returns (uint8) {
 		AggregatorV3Interface priceFeed = AggregatorV3Interface(aggregator);
 		return priceFeed.decimals();
 	}

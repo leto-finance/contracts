@@ -168,7 +168,7 @@ contract("LetoPool", accounts => {
 		let poolBalanceBeforeWithdrawal = await asset0.balanceOf(pool.address)
 
 		await poolToken.approve(pool.address, withdrawalAmount, { from: alice })
-		await pool.withdrawal(withdrawalAmount, { from: alice })
+		await pool.withdraw(withdrawalAmount, { from: alice })
 
 		let poolTokenBalance = await poolToken.balanceOf(alice, { from: alice })
 
@@ -196,7 +196,7 @@ contract("LetoPool", accounts => {
 		poolBalanceBeforeWithdrawal = await asset0.balanceOf(pool.address)
 
 		await poolToken.approve(pool.address, withdrawalAmount, { from: alice })
-		await pool.withdrawal(withdrawalAmount, { from: alice })
+		await pool.withdraw(withdrawalAmount, { from: alice })
 
 		poolTokenBalance = await poolToken.balanceOf(alice, { from: alice })
 		aliceBalance = await asset0.balanceOf(alice, { from: alice })

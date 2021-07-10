@@ -29,4 +29,12 @@ contract AggregatorV3Mock {
     function setPrice(int latestPrice_) public {
       _latestPrice = latestPrice_;
     }
+
+    function decimals()
+      public
+      view
+      returns (uint8)
+    {
+      return 18;
+    }
 }

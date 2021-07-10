@@ -19,7 +19,7 @@ contract LetoDeployer is Ownable {
 		address pool_token_,
 		address asset0_,
 		address asset1_,
-		uint8   target_leverage_,
+		uint16  target_leverage_,
 		uint256 pool_token_price_,
 		string memory bid_token_symbol_,
 		address lending_market_adapter_,

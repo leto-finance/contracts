@@ -8,7 +8,7 @@ interface ILetoPool {
 		address asset1;
 		string  name;
 		string  symbol;
-		uint8   target_leverage;
+		uint16  target_leverage;
 		uint256 pool_token_price;
 		string  bid_token_symbol;
 		address lending_market_adapter;
@@ -21,7 +21,7 @@ interface ILetoPool {
 	function initialPairPrice() external view returns (uint256);
 	function asset0() external view returns (address);
 	function asset1() external view returns (address);
-	function targetLeverage() external view returns (uint256);
+	function targetLeverage() external view returns (uint16);
 	function price() external view returns (uint256);
 	function poolTokenInitialPrice() external view returns (uint256);
 	function latestPairPrice() external view returns (uint256);
@@ -30,6 +30,7 @@ interface ILetoPool {
 	function bidToken() external view returns (address);
 
 	function borrow(address asset, uint256 amount) external;
+	function repay(address asset, uint256 amount) external;
 	function depositToLendingPool(address asset, uint256 amount) external;
 
 	function deposit(uint256 amount) external returns (uint256);
