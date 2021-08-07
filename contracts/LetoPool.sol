@@ -14,8 +14,6 @@ contract LetoPool is LetoPriceConsumer {
 
 	uint256 MAX_INT = 2**256 - 1;
 
-	enum State { RebalancingRequired, Balanced, Rebalancing }
-
 	struct Parameters {
 		address asset0;
 		address asset1;
@@ -159,13 +157,11 @@ contract LetoPool is LetoPriceConsumer {
 	}
 
 	function calculateMaxWithdrawal() public view returns (uint256) {
-		if (ltv() == 0) { return 0; }
-		ILetoStrategyAdapter.PoolState memory poolState = _strategy.poolState(address(this));
-		return poolState.deposited - ((poolState.borrowed * (10 ** 4)) / lendingAdapter().ltv(address(lendingAdapter())));
+		return _strategy.calculateMaxWithdrawal(address(this));
 	}
 
 	function ltv() public view returns (uint256) {
-		return lendingAdapter().ltv(address(lendingAdapter()));
+		return _strategy.ltv(address(this));
 	}
 
 	// State changing
@@ -221,34 +217,23 @@ contract LetoPool is LetoPriceConsumer {
 
 	event Withdrawal(address depositer, uint256 amount, uint256 amountIn, uint256 amountOut);
 
-	// TODO: add condition of max withdrawal
 	function withdraw(uint256 amount_) external returns (uint256) {
 		ILetoToken bid_token = ILetoToken(bidToken());
 		ILetoToken pool_token = ILetoToken(token());
-		ILetoToken asset1_ = ILetoToken(asset1());
 
-		require(amount_ > 0, "LetoPool: amount is less then zero");
+		require(amount_ > 0, "LetoPool: the amount can`t be equal to zero");
 		require(_token.allowance(msg.sender, address(this)) >= amount_, "LetoPool: insufficient balance");
 
 		uint256 price_ = (10 ** bid_token.decimals() * 10 ** pool_token.decimals()) / price();
 		(uint256 pool_token_amount, uint256 bid_token_amount) = tokenExchangeValues(token(), bidToken(), amount_, price_);
-		uint256 bid_token_balance = bid_token.balanceOf(address(this));
-
 		uint256 amountOut = bid_token_amount;
 
-		if (bid_token_amount > bid_token_balance) {
-			uint256 bid_token_amount_converted = (
-				(bid_token_amount * (10 ** asset1_.decimals())) /
-				((10 ** asset1_.decimals()) / uint256(latestPairPrice())) /
-				(10 ** bid_token.decimals())
-			);
-			lendingAdapter().withdraw(address(asset1_), bid_token_amount_converted, address(this));
-			
-			// FIXME: calculate minimal amount out
-			amountOut = exchangeAdapter().swap(address(asset1()), address(asset0()), bid_token_amount_converted, 0);
+		if (bid_token_amount > bid_token.balanceOf(address(this))) {
+			amountOut = _strategy.manualWithdraw(bid_token_amount);
 		}
 
 		require(bid_token.balanceOf(address(this)) >= amountOut, "LetoPool: balance of the pool is less than the amount for withdrawal");
+		require(((amountOut * uint256(latestPairPrice())) / 10 ** bid_token.decimals()) <= calculateMaxWithdrawal(), "LetoPool: withdrawal limit exceeded");
 
 		_token.transferFrom(msg.sender, address(this), pool_token_amount);
 		bid_token.transfer(msg.sender, amountOut);

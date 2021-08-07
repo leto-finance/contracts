@@ -1,6 +1,7 @@
 pragma solidity 0.8.4;
 
 import "./ILetoLendingAdapter.sol";
+import "./ILetoExchangeAdapter.sol";
 
 interface ILetoPool {
 	struct Parameters {
@@ -15,6 +16,7 @@ interface ILetoPool {
 		address exchange_adapter;
 	}
 
+	function exchangeAdapter() external view returns (ILetoExchangeAdapter);
 	function lendingAdapter() external view returns (ILetoLendingAdapter);
 	function parameters() external view returns (Parameters memory);
 	function decimals() external view returns (uint8);

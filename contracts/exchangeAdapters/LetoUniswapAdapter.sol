@@ -13,16 +13,16 @@ contract LetoUniswapAdapter {
 		router = ISwapRouter(registry.getAddress("Uniswap:Router"));
 	}
 
-	event Swap(address asset0, address asset1, uint256 amountIn, uint256 amountOut);
+	event Swap(address assetIn, address assetOut, uint256 amountIn, uint256 amountOut);
 
-	function swap(address asset0, address asset1, uint256 amountIn, uint256 amountOutMinimum) external returns (uint256 amountOut) {
-		ILetoToken(asset0).transferFrom(msg.sender, address(this), amountIn);
-		ILetoToken(asset0).approve(address(router), amountIn);
+	function swap(address assetIn, address assetOut, uint256 amountIn, uint256 amountOutMinimum) external returns (uint256 amountOut) {
+		ILetoToken(assetIn).transferFrom(msg.sender, address(this), amountIn);
+		ILetoToken(assetIn).approve(address(router), amountIn);
 
 		amountOut = router.exactInputSingle(
 			ISwapRouter.ExactInputSingleParams({
-				tokenIn: asset0,
-				tokenOut: asset1,
+				tokenIn: assetIn,
+				tokenOut: assetOut,
 				fee: 3000,
 				recipient: msg.sender,
 				deadline: block.timestamp + 1000,
@@ -32,6 +32,6 @@ contract LetoUniswapAdapter {
 			})
 		);
 
-		emit Swap(asset0, asset1, amountIn, amountOut);
+		emit Swap(assetIn, assetOut, amountIn, amountOut);
 	}
 }
