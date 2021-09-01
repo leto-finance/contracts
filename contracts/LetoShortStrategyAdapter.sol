@@ -49,14 +49,14 @@ contract LetoShortStrategyAdapter {
 	event ManualWithdraw(address asset, uint256 amount);
 
 	function manualWithdraw(uint256 _amount) external returns (uint256) {
-		ILetoPool pool = ILetoPool(msg.sender);
-		ILetoToken bid_token = ILetoToken(pool.bidToken());
+		// ILetoPool pool = ILetoPool(msg.sender);
+		// ILetoToken bid_token = ILetoToken(pool.bidToken());
 
-		pool.lendingAdapter().withdraw(address(bid_token), _amount, address(pool));
+		// pool.lendingAdapter().withdraw(address(bid_token), _amount, address(pool));
 
-		emit ManualWithdraw(address(bid_token), _amount);
+		// emit ManualWithdraw(address(bid_token), _amount);
 
-		return _amount;
+		// return _amount;
 	}
 
 	event RebalanceWithdrawalStep(address asset, uint256 amount);
@@ -144,7 +144,7 @@ contract LetoShortStrategyAdapter {
 		ILetoPool.Parameters memory parameters = pool.parameters();
 
 		uint256 latestPairPrice = pool.latestPairPrice();
-		uint256 poolDecimals = pool.decimals();
+		// uint256 poolDecimals = pool.decimals();
 
 		ILetoToken asset0 = ILetoToken(parameters.asset0);
 		ILetoToken asset1 = ILetoToken(parameters.asset1);
@@ -156,7 +156,7 @@ contract LetoShortStrategyAdapter {
 
 		uint256 borrowedAssets_ = borrowed(pool_, asset1.symbol());
 
-		uint256 balance0Converted = (balance0 * (10 ** poolDecimals)) / ((10 ** poolDecimals) / latestPairPrice) / (10 ** decimals0);
+		uint256 balance0Converted = 0; //(balance0 * (10 ** poolDecimals)) / ((10 ** poolDecimals) / latestPairPrice) / (10 ** decimals0);
 
 		uint256 deposited_ = deposited(balance0Converted, balance1, pool.lendingAdapter().deposited());
 		uint256 netValue_ = netValue(deposited_, borrowedAssets_);
@@ -172,14 +172,10 @@ contract LetoShortStrategyAdapter {
 		});
 	}
 
-	function price(address pool_) public view returns (uint256) {
+	function rate(address pool_) public view returns (uint256) {
 		ILetoPool pool = ILetoPool(pool_);
-
-		uint256 decimals_ = 10 ** ILetoToken(pool.bidToken()).decimals();
-		uint256 deltaPrice = (uint256(pool.initialPairPrice()) * decimals_) / uint256(pool.latestPairPrice());
-		uint256 poolTokenInitialPrice = uint256(pool.poolTokenInitialPrice());
-
-		return uint256((poolTokenInitialPrice * deltaPrice) / decimals_);
+		uint256 decimals_ = 10 ** pool.pairPriceDecimals();
+		return (pool.initialRate() * ((pool.latestPairPrice() * decimals_) / pool.initialPairPrice())) / decimals_;
 	}
 
 	function calculateRebalancingAmount(uint256 deposited_, uint256 netValue_, uint16 targetLeverage_) public view returns (uint256) {

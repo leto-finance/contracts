@@ -9,6 +9,7 @@ import "./interfaces/ILetoStrategyAdapter.sol";
 import "./interfaces/ILetoExchangeAdapter.sol";
 import "./interfaces/ILetoRegistry.sol";
 import "./interfaces/ILetoToken.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract LetoPool is LetoPriceConsumer {
 
@@ -20,15 +21,14 @@ contract LetoPool is LetoPriceConsumer {
 		string  name;
 		string  symbol;
 		uint16  target_leverage;
-		uint256 pool_token_price;
-		string  bid_token_symbol;
+		uint256 rate;
 		address lending_market_adapter;
 		address exchange_adapter;
 	}
 
 	address private _deployer;
 	address public _priceFeed;
-	int256 private _initial_pair_price;
+	uint256 private _initial_pair_price;
 
 	ILetoStrategyAdapter private _strategy;
 	ILetoRegistry        private _registry;
@@ -43,7 +43,6 @@ contract LetoPool is LetoPriceConsumer {
 		address       asset1_,
 		uint16        target_leverage_,
 		uint256       pool_token_price_,
-		string memory bid_token_symbol_,
 		address       lending_market_adapter_,
 		address       exchange_adapter_
 	) {
@@ -69,55 +68,40 @@ contract LetoPool is LetoPriceConsumer {
 			asset0:                 asset0_,
 			asset1:                 asset1_,
 			target_leverage:        target_leverage_,
-			pool_token_price:       pool_token_price_,
-			bid_token_symbol:       bid_token_symbol_,
+			rate:       pool_token_price_,
 			lending_market_adapter: lending_market_adapter_,
 			exchange_adapter:       exchange_adapter_
 		});
 
-		_priceFeed = _registry.getAddress(
-			string(
-				abi.encodePacked(
-					"PriceFeed:",
-					ILetoToken(asset0_).symbol(),
-					"/",
-					ILetoToken(asset1_).symbol()
-				)
-			)
-		);
-
+		_priceFeed = _registry.getAddress(string(abi.encodePacked("PriceFeed:", _token.symbol())));
 		_initial_pair_price = latestPairPrice();
 
-		ILetoToken(asset0_).approve(exchange_adapter_, MAX_INT);
-		ILetoToken(asset1_).approve(exchange_adapter_, MAX_INT);
-		ILetoToken(asset0_).approve(lending_market_adapter_, MAX_INT);
-		ILetoToken(asset1_).approve(lending_market_adapter_, MAX_INT);
+		ERC20(asset0_).approve(exchange_adapter_, MAX_INT);
+		ERC20(asset1_).approve(exchange_adapter_, MAX_INT);
+		ERC20(asset0_).approve(lending_market_adapter_, MAX_INT);
+		ERC20(asset1_).approve(lending_market_adapter_, MAX_INT);
 	}
 
 	// Getters
 
-	function decimals() public view returns (uint8) {
-		return getPriceDecimals(_priceFeed);
+	function latestPairPrice() public view returns (uint256) {
+		return uint256(getPrice(_priceFeed));
 	}
 
-	function latestPairPrice() public view returns (int256) {
-		return getPrice(_priceFeed);
+	function pairPriceDecimals() public view returns (uint256) {
+		return uint256(getPriceDecimals(_priceFeed));
 	}
 
-	function initialPairPrice() public view returns (int256) {
+	function initialPairPrice() public view returns (uint256) {
 		return _initial_pair_price;
 	}
 
-	function price() public view returns (uint256) {
-		return _strategy.price(address(this));
+	function rate() public view returns (uint256) {
+		return _strategy.rate(address(this));
 	}
 
-	function bidTokenSymbol() public view returns (string memory) {
-		return _parameters.bid_token_symbol;
-	}
-
-	function poolTokenInitialPrice() public view returns (uint256) {
-		return _parameters.pool_token_price;
+	function initialRate() public view returns (uint256) {
+		return _parameters.rate;
 	}
 
 	function asset0() public view returns (address) {
@@ -144,10 +128,6 @@ contract LetoPool is LetoPriceConsumer {
 		return address(_token);
 	}
 
-	function bidToken() public view returns (address) {
-		return _registry.getAddress(bidTokenSymbol());
-	}
-
 	function exchangeAdapter() public view returns (ILetoExchangeAdapter) {
 		return ILetoExchangeAdapter(_parameters.exchange_adapter);
 	}
@@ -158,10 +138,6 @@ contract LetoPool is LetoPriceConsumer {
 
 	function calculateMaxWithdrawal() public view returns (uint256) {
 		return _strategy.calculateMaxWithdrawal(address(this));
-	}
-
-	function ltv() public view returns (uint256) {
-		return _strategy.ltv(address(this));
 	}
 
 	// State changing
@@ -196,76 +172,39 @@ contract LetoPool is LetoPriceConsumer {
 
 	// Public state changing methods
 
-	event Deposit(address depositer, uint256 amount, uint256 amountIn, uint256 amountOut);
+	event Deposit(address depositer, uint256 amountIn, uint256 amountOut);
 
-	function deposit(uint256 amount_) external returns (uint256) {
-		ILetoToken bid_token = ILetoToken(bidToken());
+	function deposit(uint256 amountIn) external returns (uint256 amountOut) {
+		ERC20 bid_token = ERC20(asset0());
 
-		require(amount_ > 0, "LetoPool: amount is less then zero");
-		require(bid_token.balanceOf(msg.sender) >= amount_, "LetoPool: insufficient balance");
-		require(bid_token.allowance(msg.sender, address(this)) >= amount_, "LetoPool: not allowance to spend");
+		require(amountIn > 0, "LetoPool: amount is less then zero");
+		require(bid_token.balanceOf(msg.sender) >= amountIn, "LetoPool: insufficient balance");
+		require(bid_token.allowance(msg.sender, address(this)) >= amountIn, "LetoPool: not approved to transfer");
 
-		(uint256 bid_token_amount, uint256 pool_token_amount) = tokenExchangeValues(bidToken(), token(), amount_, price());
+		amountOut = rate() * amountIn;
 
-		bid_token.transferFrom(msg.sender, address(this), bid_token_amount);
-		_token.mint(msg.sender, pool_token_amount);
+		bid_token.transferFrom(msg.sender, address(this), amountIn);
+		_token.mint(msg.sender, amountOut);
 
-		emit Deposit(msg.sender, amount_, bid_token_amount, pool_token_amount);
-
-		return pool_token_amount;
+		emit Deposit(msg.sender, amountIn, amountOut);
 	}
 
-	event Withdrawal(address depositer, uint256 amount, uint256 amountIn, uint256 amountOut);
+	event Withdrawal(address depositer, uint256 amountIn, uint256 amountOut);
 
-	function withdraw(uint256 amount_) external returns (uint256) {
-		ILetoToken bid_token = ILetoToken(bidToken());
+	function redeem(uint256 amountIn) external returns (uint256 amountOut) {
+		ERC20 bid_token = ERC20(asset0());
 		ILetoToken pool_token = ILetoToken(token());
 
-		require(amount_ > 0, "LetoPool: the amount can`t be equal to zero");
-		require(_token.allowance(msg.sender, address(this)) >= amount_, "LetoPool: insufficient balance");
+		require(amountIn > 0, "LetoPool: the amount can`t be equal to zero");
+		require(pool_token.balanceOf(msg.sender) >= amountIn, "LetoPool: insufficient balance");
+		require(_token.allowance(msg.sender, address(this)) >= amountIn, "LetoPool: not approved to transfer");
 
-		uint256 price_ = (10 ** bid_token.decimals() * 10 ** pool_token.decimals()) / price();
-		(uint256 pool_token_amount, uint256 bid_token_amount) = tokenExchangeValues(token(), bidToken(), amount_, price_);
-		uint256 amountOut = bid_token_amount;
+		amountOut = amountIn / rate();
 
-		if (bid_token_amount > bid_token.balanceOf(address(this))) {
-			amountOut = _strategy.manualWithdraw(bid_token_amount);
-		}
-
-		require(bid_token.balanceOf(address(this)) >= amountOut, "LetoPool: balance of the pool is less than the amount for withdrawal");
-		require(((amountOut * uint256(latestPairPrice())) / 10 ** bid_token.decimals()) <= calculateMaxWithdrawal(), "LetoPool: withdrawal limit exceeded");
-
-		_token.transferFrom(msg.sender, address(this), pool_token_amount);
+		pool_token.burn(msg.sender, amountIn);
 		bid_token.transfer(msg.sender, amountOut);
 
-		emit Withdrawal(msg.sender, amount_, pool_token_amount, amountOut);
-
-		return amountOut;
-	}
-
-	// Internals
-
-	function tokenExchangeValues(
-		address tokenA_, address tokenB_,
-		uint256 amountA_, uint256 price_
-	)
-		internal
-		view
-		returns (uint256 amountA, uint256 amountB)
-	{
-		ILetoToken token_a = ILetoToken(tokenA_);
-		uint256 token_a_decimals = token_a.decimals();
-
-		ILetoToken token_b = ILetoToken(tokenB_);
-		uint256 token_b_decimals = token_b.decimals();
-
-		amountA = amountA_;
-
-		if (token_a_decimals > token_b_decimals) {
-			amountA = amountA_ - (amountA_ % (10 ** token_b_decimals));
-		}
-
-		amountB = (amountA * (10 ** token_b_decimals)) / price_;
+		emit Withdrawal(msg.sender, amountIn, amountOut);
 	}
 
 	// Modifiers

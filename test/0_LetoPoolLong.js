@@ -1,5 +1,5 @@
-const { expectRevert } = require('@openzeppelin/test-helpers');
-const { encode } = require('rlp');
+const { expectRevert } = require('@openzeppelin/test-helpers')
+const { encode } = require('rlp')
 
 
 // Contracts
@@ -33,191 +33,230 @@ async function getDeployedContracts() {
 	}
 }
 
-contract("LetoPool", accounts => {
+contract("LetoPool long", accounts => {
 	const { BN } = web3.utils
 
-	let pool, asset0, asset1, aggregatorV3Mock;
+	const poolTokenDecimals = 24;
+	const WETHDecimals = 18;
+	const USDCDecimals = 6;
+
+	const rate = 31531756 // 100 USD for 1 L-ETHup at a 1 ETH = 3153 USD
+
+	let pool, poolToken, USDC, WETH, aggregatorV3Mock
 
 	it("should deploy LetoPool with correct parameters", async () => {
-		const [pool_owner] = accounts
-		const { token, registry, deployer, lendingMarketAdapter, exchangeAdapter, strategyAdapter } = await getDeployedContracts();
+		const [poolOwner] = accounts
+		const { token, registry, deployer, lendingMarketAdapter, exchangeAdapter, strategyAdapter } = await getDeployedContracts()
 
-		asset0 = await LetoTokenMock.new("USD Coin", "USDC", 18, { from: pool_owner })
-		asset1 = await LetoTokenMock.new("wrapped ethereum", "WETH", 6, { from: pool_owner })
-		const poolToken = await LetoTokenMock.new("L-ETHup", "L-ETHup", 6);
+		USDC =      await LetoTokenMock.new("USD Coin",         "USDC",    USDCDecimals,      { from: poolOwner })
+		WETH =      await LetoTokenMock.new("Wrapped Ethereum", "WETH",    WETHDecimals,      { from: poolOwner })
+		poolToken = await LetoTokenMock.new("L-ETHup",          "L-ETHup", poolTokenDecimals, { from: poolOwner })
 
-		await poolToken.transferOwnership(deployer.address);
+		await poolToken.transferOwnership(deployer.address)
 
-		aggregatorV3Mock = await AggregatorV3Mock.new({ from: pool_owner })
+		aggregatorV3Mock = await AggregatorV3Mock.new({ from: poolOwner })
 
-		await registry.setAddress("PriceFeed:USDC/WETH", aggregatorV3Mock.address, { from: pool_owner })
-		await registry.setAddress("USDC", asset0.address, { from: pool_owner })
+		await registry.setAddress("PriceFeed:L-ETHup", aggregatorV3Mock.address, { from: poolOwner })
+		await registry.setAddress("USDC", USDC.address, { from: poolOwner })
+		await registry.setAddress("WETH", WETH.address, { from: poolOwner })
 
-		const decimalsPool = (new BN(10)).pow(await poolToken.decimals())
-		const decimals0 = (new BN(10)).pow(await asset0.decimals())
-		const decimals1 = (new BN(10)).pow(await asset1.decimals())
+		const decimals = (new BN(10)).pow(new BN(18))
+		const initialDeposit = new BN("317140599464235357") // WETH 0.317140599464235357 (wei) * $3153 ~ $1000 / $100 = 10 L-ETHup
 
-		const price = (new BN(100)).mul(decimals0) // 100 USDC
-		const initialDeposit = (new BN(10000)).mul(decimals0); // 10.000 USDC
+		await WETH.mint(poolOwner, initialDeposit, { from: poolOwner })
 
-		await asset0.mint(pool_owner, initialDeposit, { from: pool_owner })
-
-		const poolAddress = "0x" + web3.utils.sha3(encode([deployer.address, 1])).substr(26);
-		await asset0.transfer(deployer.address, initialDeposit, { from: pool_owner })
+		const poolAddress = "0x" + web3.utils.sha3(encode([deployer.address, 1])).substr(26)
+		await WETH.transfer(deployer.address, initialDeposit, { from: poolOwner })
 
 		assert.equal(
-			(await asset0.balanceOf.call(deployer.address, { from: pool_owner })).toString(),
+			(await WETH.balanceOf.call(deployer.address, { from: poolOwner })).toString(),
 			initialDeposit.toString()
-		);
+		)
 
 		const deployArgs = [
-			strategyAdapter.address,
-			poolToken.address,
-			asset0.address, asset1.address,
-			2,
-			price, "USDC",
+			strategyAdapter.address, poolToken.address,
+			WETH.address, USDC.address,
+			2, //FIXME: add decimals
+			rate,
 			lendingMarketAdapter.address, exchangeAdapter.address,
 			initialDeposit
 		]
 
-		await aggregatorV3Mock.setPrice("428636336359505")
-		
-		const rx = await deployer.deployPool(...deployArgs, { from: pool_owner })
+		await aggregatorV3Mock.setPrice("315317565712")
+
+		await deployer.deployPool(...deployArgs, { from: poolOwner })
 
 		pool = await LetoPool.at(poolAddress)
 
 		const parameters = await pool.parameters()
-		const poolBalance = await asset0.balanceOf.call(pool.address, { from: pool_owner })
+		const poolBalance = await WETH.balanceOf.call(pool.address, { from: poolOwner })
 
-		assert.equal((await pool._priceFeed.call()), aggregatorV3Mock.address);
-
-		assert.equal((await poolToken.balanceOf.call(pool_owner)).toString(), ((new BN(100)).mul(decimalsPool)).toString());
-
-		assert.equal(poolBalance.toString(), initialDeposit.toString());
-		assert.equal(parameters.asset0, asset0.address);
-		assert.equal(parameters.asset1, asset1.address);
-		assert.equal(parameters.name, "L-ETHup");
-		assert.equal(parameters.symbol, "L-ETHup");
-		assert.equal(parameters.target_leverage, "2");
-		assert.equal(parameters.pool_token_price, price);
-		assert.equal(parameters.bid_token_symbol, 'USDC');
-		assert.equal(parameters.lending_market_adapter, lendingMarketAdapter.address);
-		assert.equal(parameters.exchange_adapter, exchangeAdapter.address);
+		assert.equal((await pool._priceFeed.call()), aggregatorV3Mock.address)
+		assert.equal((await poolToken.balanceOf.call(poolOwner)).toString(), ((new BN(10)).mul((new BN(10)).pow(new BN(poolTokenDecimals))).add(new BN(3496892))).toString())
+		assert.equal(poolBalance.toString(), initialDeposit.toString())
+		assert.equal(parameters.asset0, WETH.address)
+		assert.equal(parameters.asset1, USDC.address)
+		assert.equal(parameters.name, "L-ETHup")
+		assert.equal(parameters.symbol, "L-ETHup")
+		assert.equal(parameters.target_leverage, "2")
+		assert.equal(parameters.rate, rate)
+		assert.equal(parameters.lending_market_adapter, lendingMarketAdapter.address)
+		assert.equal(parameters.exchange_adapter, exchangeAdapter.address)
 	})
 
-	it("should mint correct amount of L-ETHup tokens of pool for USDC deposit", async () => {
-		const [pool_owner, alice, bob] = accounts
-		const { token, registry } = await getDeployedContracts();
+	it("should mint correct amount of L-ETHup tokens of pool for WETH deposit", async () => {
+		const [poolOwner, alice, bob] = accounts
+		const { token, registry } = await getDeployedContracts()
 		const poolToken = await LetoToken.at(await pool.token())
-
 		const decimalsPool = (new BN(10)).pow(await poolToken.decimals())
-		const decimals0 = (new BN(10)).pow(await asset0.decimals())
 
-		const depoitAmount = "100000000000000999999" // 100.00000000000999999 USDC
-
-		await asset0.mint(alice, new BN(depoitAmount), { from: pool_owner })
-		const aliceBalance = await asset0.balanceOf(alice, { from: alice })
+		const depoitAmount = new BN("31714059946423536") // WETH 0.031714059946423536 (wei) * $3153 ~ $10 / $100 = 1 L-ETHup
+		await WETH.mint(alice, new BN(depoitAmount), { from: poolOwner })
+		const aliceBalance = await WETH.balanceOf(alice, { from: alice })
 
 		assert.equal(
 			aliceBalance.toString(),
 			depoitAmount,
-			"Balance USDC isn`t correct"
-		);
+			"Balance WETH isn`t correct"
+		)
 
-		const poolBalanceBeforeDeposit = await asset0.balanceOf.call(pool.address, { from: alice })
+		const poolBalanceBeforeDeposit = await WETH.balanceOf.call(pool.address, { from: alice })
 
-		await asset0.approve(pool.address, depoitAmount, { from: alice })
+		await WETH.approve(pool.address, depoitAmount, { from: alice })
 		await pool.deposit(depoitAmount, { from: alice })
 
 		const alicePoolTokenBalance = await poolToken.balanceOf.call(alice, { from: alice })
-		const alicePostBalance = await asset0.balanceOf.call(alice, { from: alice })
-		const poolBalance = await asset0.balanceOf.call(pool.address, { from: alice })
+		const alicePostBalance = await WETH.balanceOf.call(alice, { from: alice })
+
+		const poolBalance = await WETH.balanceOf.call(pool.address, { from: alice })
 
 		assert.equal(
 			(poolBalance.sub(poolBalanceBeforeDeposit)).toString(),
-			(new BN(100)).mul(decimals0).toString(), // 100 USDT
-			"Balance L-ETHup isn`t correct"
-		);
-
-		assert.equal(
-			alicePostBalance.toString(),
-			"999999", // 0.00000000000999999 USDC
-			"Balance USDC isn`t correct"
-		);
+			depoitAmount,
+			"Balance WETH isn`t correct"
+		)
 
 		assert.equal(
 			alicePoolTokenBalance.toString(),
-			(new BN(1)).mul(decimalsPool).toString(), // 1 L-ETHup
+			(new BN(1)).mul(decimalsPool).add(new BN(9809216)).toString(), // 1 L-ETHup
 			"Balance L-ETHup isn`t correct"
-		);
+		)
 	})
 
 	it("should revert tx when user send ethereum to pool", async () => {
 		const [_, alice] = accounts
-		await expectRevert(pool.send(10, { from: alice }), "revert");
+		await expectRevert(pool.send(10, { from: alice }), "revert")
 	})
 
-	it("should transfer correnct amount of L-ETHup to user for USDC tokens", async () => {
-		const [admin, alice] = accounts
-		const withdrawalAmount = new BN(500000) // 0.5 L-ETHup
-		const decimals = (new BN(10)).pow(await asset0.decimals())
-		const price = (new BN(100)).mul(decimals) // 100 USDC
+	it("should transfer correnct amount of L-ETHup to user for WETH tokens", async () => {
+		const [poolOwner, alice] = accounts
 
 		const poolToken = await LetoToken.at(await pool.token())
-		
-		let poolBalanceBeforeWithdrawal = await asset0.balanceOf(pool.address)
+		const withdrawalAmount = new BN("1000000000000000009809216") // 1 * (10 ** 18) = 1 L-ETHup
+		const poolBalanceBeforeWithdrawal = await WETH.balanceOf(pool.address)
 
 		await poolToken.approve(pool.address, withdrawalAmount, { from: alice })
-		await pool.withdraw(withdrawalAmount, { from: alice })
+		await pool.redeem(withdrawalAmount, { from: alice })
 
-		let poolTokenBalance = await poolToken.balanceOf(alice, { from: alice })
-
-		let aliceBalance = await asset0.balanceOf(alice, { from: alice })
-		let poolBalanceAfterWithdrawal = await asset0.balanceOf(pool.address)
-
-		assert.equal(
-			poolBalanceBeforeWithdrawal.sub(poolBalanceAfterWithdrawal).toString(),
-			"50000000000000000000", // 50 USDC
-			"Balance USDC isn`t correct"
-		);
+		const aliceBalance = await WETH.balanceOf(alice)
+		const poolTokenBalance = await poolToken.balanceOf(alice)
+		const poolBalanceAfterWithdrawal = await WETH.balanceOf(pool.address)
 
 		assert.equal(
-			poolTokenBalance.toString(),
-			"500000", // 0.5 L-ETHup
-			"Balance L-ETHup isn`t correct"
-		);
-
-		assert.equal(
-			aliceBalance.toString(),
-			"50000000000000999999", // 50.00000000000999999 USDC
-			"Balance USDC isn`t correct"
-		);
-
-		poolBalanceBeforeWithdrawal = await asset0.balanceOf(pool.address)
-
-		await poolToken.approve(pool.address, withdrawalAmount, { from: alice })
-		await pool.withdraw(withdrawalAmount, { from: alice })
-
-		poolTokenBalance = await poolToken.balanceOf(alice, { from: alice })
-		aliceBalance = await asset0.balanceOf(alice, { from: alice })
-		poolBalanceAfterWithdrawal = await asset0.balanceOf(pool.address)
-
-		assert.equal(
-			poolBalanceBeforeWithdrawal.sub(poolBalanceAfterWithdrawal).toString(),
-			"50000000000000000000", // 50 USDC
-			"Balance USDC isn`t correct"
-		);
+			poolBalanceAfterWithdrawal.toString(),
+			"317140599464235357", // initial deposit amount
+			"Balance WETH isn`t correct"
+		)
 
 		assert.equal(
 			poolTokenBalance.toString(),
 			"0", // 0 L-ETHup
 			"Balance L-ETHup isn`t correct"
-		);
-	
+		)
+
 		assert.equal(
 			aliceBalance.toString(),
-			"100000000000000999999", // 100.00000000000999999 USDC
-			"Balance USDC isn`t correct"
-		);
+			"31714059946423536", // alice deposit amount
+			"Balance WETH isn`t correct"
+		)
+	})
+
+	it("should mint correct amount of L-ETHup tokens of pool for WETH deposit when WETH price increase x2", async () => {
+		const [poolOwner, alice, bob] = accounts
+		const { token, registry } = await getDeployedContracts()
+		const poolToken = await LetoToken.at(await pool.token())
+
+		await aggregatorV3Mock.setPrice("630635131424")
+
+		const aliceBalance = await WETH.balanceOf(alice, { from: alice })
+		const depoitAmount = aliceBalance // WETH 0.31714059946423536
+
+		assert.equal(
+			aliceBalance.toString(),
+			"31714059946423536",
+			"Balance WETH isn`t correct"
+		)
+
+		const poolBalanceBeforeDeposit = await WETH.balanceOf.call(pool.address, { from: alice })
+
+		await WETH.approve(pool.address, depoitAmount, { from: alice })
+		await pool.deposit(depoitAmount, { from: alice })
+
+		const alicePoolTokenBalance = await poolToken.balanceOf.call(alice, { from: alice })
+		const alicePostBalance = await WETH.balanceOf.call(alice, { from: alice })
+		const poolBalance = await WETH.balanceOf.call(pool.address, { from: alice })
+
+		assert.equal(
+			(poolBalance.sub(poolBalanceBeforeDeposit)).toString(),
+			depoitAmount,
+			"Balance WETH isn`t correct"
+		)
+
+		assert.equal(
+			alicePoolTokenBalance.toString(),
+			(new BN(5)).mul((new BN(10)).pow((await poolToken.decimals()).sub(new BN(1)))).add(new BN(4904608)).toString(), // 0.5 L-ETHup
+			"Balance L-ETHup isn`t correct"
+		)
+	})
+
+	it("should mint correct amount of L-ETHup tokens of pool for WETH deposit when WETH price decrease x2", async () => {
+		const [poolOwner, alice, bob] = accounts
+		const { token, registry } = await getDeployedContracts()
+		const poolToken = await LetoToken.at(await pool.token())
+
+		await aggregatorV3Mock.setPrice("157658782856")
+
+		const alicePoolTokenBalanceBefore = await poolToken.balanceOf.call(alice, { from: alice })
+
+		const depoitAmount = new BN("31714059946423536") // WETH 0.031714059946423536 (wei) * $3153 ~ $10 / $100 = 2 L-ETHup
+		await WETH.mint(alice, new BN(depoitAmount), { from: poolOwner })
+		const aliceBalance = await WETH.balanceOf(alice, { from: alice })
+
+		assert.equal(
+			aliceBalance.toString(),
+			"31714059946423536",
+			"Balance WETH isn`t correct"
+		)
+
+		const poolBalanceBeforeDeposit = await WETH.balanceOf.call(pool.address, { from: alice })
+
+		await WETH.approve(pool.address, depoitAmount, { from: alice })
+		await pool.deposit(depoitAmount, { from: alice })
+
+		const alicePoolTokenBalance = await poolToken.balanceOf.call(alice, { from: alice })
+		const alicePostBalance = await WETH.balanceOf.call(alice, { from: alice })
+		const poolBalance = await WETH.balanceOf.call(pool.address, { from: alice })
+
+		assert.equal(
+			(poolBalance.sub(poolBalanceBeforeDeposit)).toString(),
+			depoitAmount,
+			"Balance WETH isn`t correct"
+		)
+
+		assert.equal(
+			alicePoolTokenBalance.sub(alicePoolTokenBalanceBefore).toString(),
+			(new BN(2)).mul((new BN(10)).pow((await poolToken.decimals()))).add(new BN(19618432)).toString(), // 2 L-ETHup
+			"Balance L-ETHup isn`t correct"
+		)
 	})
 })

@@ -20,16 +20,15 @@ contract LetoDeployer is Ownable {
 		address asset0_,
 		address asset1_,
 		uint16  target_leverage_,
-		uint256 pool_token_price_,
-		string memory bid_token_symbol_,
+		uint256 rate_,
 		address lending_market_adapter_,
 		address exchange_adapter_,
 		uint256 amount_
 	)
 		public onlyOwner returns (LetoPool)
 	{
-		Ownable ownableToken = Ownable(pool_token_);
-		require(ownableToken.owner() == address(this), "LetoDeployer: deployer must be owner of pool token");
+		Ownable ownable_token = Ownable(pool_token_);
+		require(ownable_token.owner() == address(this), "LetoDeployer: deployer must be owner of pool token");
 
 		LetoPool pool = new LetoPool(
 			strategy_,
@@ -38,18 +37,15 @@ contract LetoDeployer is Ownable {
 			asset0_,
 			asset1_,
 			target_leverage_,
-			pool_token_price_,
-			bid_token_symbol_,
+			rate_,
 			lending_market_adapter_,
 			exchange_adapter_
 		);
 
-		IERC20(ILetoRegistry(_leto_registry).getAddress(bid_token_symbol_)).approve(address(pool), amount_);
+		IERC20(asset0_).approve(address(pool), amount_);
 
-		ownableToken.transferOwnership(address(pool));
-		uint256 pool_token_amount = pool.deposit(amount_);
-
-		IERC20(pool_token_).transfer(address(msg.sender), pool_token_amount);
+		ownable_token.transferOwnership(address(pool));
+		IERC20(pool_token_).transfer(address(msg.sender), pool.deposit(amount_));
 
 		return pool;
 	}

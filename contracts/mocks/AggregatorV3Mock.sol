@@ -35,6 +35,6 @@ contract AggregatorV3Mock {
       view
       returns (uint8)
     {
-      return 18;
+      return 8;
     }
 }
