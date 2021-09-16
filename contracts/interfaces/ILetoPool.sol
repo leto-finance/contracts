@@ -31,9 +31,9 @@ interface ILetoPool {
 
 	function borrow(address asset, uint256 amount) external;
 	function repay(address asset, uint256 amount) external;
+	function withdraw(address asset, uint256 amount) external;
 	function depositToLendingPool(address asset, uint256 amount) external;
 
 	function deposit(uint256 amount) external returns (uint256);
-	function withdrawal(uint256 amount) external returns (uint256);
 	function swap(address assetIn, address assetOut, uint256 amountIn, uint256 amountOut) external returns (uint256);
 }

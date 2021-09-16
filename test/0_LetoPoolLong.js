@@ -76,7 +76,7 @@ contract("LetoPool long", accounts => {
 		const deployArgs = [
 			strategyAdapter.address, poolToken.address,
 			WETH.address, USDC.address,
-			2, //FIXME: add decimals
+			20000, // decimals 4
 			rate,
 			lendingMarketAdapter.address, exchangeAdapter.address,
 			initialDeposit
@@ -98,7 +98,7 @@ contract("LetoPool long", accounts => {
 		assert.equal(parameters.asset1, USDC.address)
 		assert.equal(parameters.name, "L-ETHup")
 		assert.equal(parameters.symbol, "L-ETHup")
-		assert.equal(parameters.target_leverage, "2")
+		assert.equal(parameters.target_leverage, "20000")
 		assert.equal(parameters.rate, rate)
 		assert.equal(parameters.lending_market_adapter, lendingMarketAdapter.address)
 		assert.equal(parameters.exchange_adapter, exchangeAdapter.address)

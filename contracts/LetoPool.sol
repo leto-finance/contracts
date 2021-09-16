@@ -9,7 +9,9 @@ import "./interfaces/ILetoStrategyAdapter.sol";
 import "./interfaces/ILetoExchangeAdapter.sol";
 import "./interfaces/ILetoRegistry.sol";
 import "./interfaces/ILetoToken.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "./interfaces/IStableDebtToken.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 contract LetoPool is LetoPriceConsumer {
 
@@ -68,7 +70,7 @@ contract LetoPool is LetoPriceConsumer {
 			asset0:                 asset0_,
 			asset1:                 asset1_,
 			target_leverage:        target_leverage_,
-			rate:       pool_token_price_,
+			rate:                   pool_token_price_,
 			lending_market_adapter: lending_market_adapter_,
 			exchange_adapter:       exchange_adapter_
 		});
@@ -76,10 +78,10 @@ contract LetoPool is LetoPriceConsumer {
 		_priceFeed = _registry.getAddress(string(abi.encodePacked("PriceFeed:", _token.symbol())));
 		_initial_pair_price = latestPairPrice();
 
-		ERC20(asset0_).approve(exchange_adapter_, MAX_INT);
-		ERC20(asset1_).approve(exchange_adapter_, MAX_INT);
-		ERC20(asset0_).approve(lending_market_adapter_, MAX_INT);
-		ERC20(asset1_).approve(lending_market_adapter_, MAX_INT);
+		IERC20(asset0_).approve(exchange_adapter_, MAX_INT);
+		IERC20(asset1_).approve(exchange_adapter_, MAX_INT);
+		IERC20(asset0_).approve(lending_market_adapter_, MAX_INT);
+		IERC20(asset1_).approve(lending_market_adapter_, MAX_INT);
 	}
 
 	// Getters
@@ -145,22 +147,43 @@ contract LetoPool is LetoPriceConsumer {
 	event Repay(address asset, uint256 amount);
 
 	function repay(address asset_, uint256 amount) onlyStrategy external {
-		lendingAdapter().repay(asset_, amount, _parameters.lending_market_adapter);
+		lendingAdapter().repay(asset_, amount);
 		emit Borrow(asset_, amount);
 	}
 
 	event Borrow(address asset, uint256 amount);
 
 	function borrow(address asset, uint256 amount) onlyStrategy external {
-		lendingAdapter().borrow(asset, amount, _parameters.lending_market_adapter);
+		(bool success, bytes memory data) = address(lendingAdapter()).delegatecall(
+			abi.encodeWithSignature("borrow(address,address,uint256)", lendingAdapter().lendingPool(), asset, amount)
+		);
+
+		require(success, "LetoPool: call borrow failed");
+
 		emit Borrow(asset, amount);
 	}
 
 	event DepositToLendingPool(address asset, uint256 amount);
 
 	function depositToLendingPool(address asset, uint256 amount) onlyStrategy external {
-		lendingAdapter().deposit(asset, amount, _parameters.lending_market_adapter);
+		lendingAdapter().deposit(asset, amount);
 		emit DepositToLendingPool(asset, amount);
+	}
+
+	event WithdrawFromLendingPool(address asset, uint256 amount);
+
+	function withdrawCall(address asset, uint256 amount) internal {
+		(bool success, bytes memory data) = address(lendingAdapter()).delegatecall(
+			abi.encodeWithSignature("withdraw(address,address,uint256)", lendingAdapter().lendingPool(), asset, amount)
+		);
+
+		require(success, "LetoPool: call withdraw failed");
+
+		emit WithdrawFromLendingPool(asset, amount);
+	}
+
+	function withdraw(address asset, uint256 amount) onlyStrategy external {
+		withdrawCall(asset, amount);
 	}
 
 	event SwapThroughAdapter(address asset0, address asset1, uint256 amountIn, uint256 amountOut);
@@ -175,15 +198,15 @@ contract LetoPool is LetoPriceConsumer {
 	event Deposit(address depositer, uint256 amountIn, uint256 amountOut);
 
 	function deposit(uint256 amountIn) external returns (uint256 amountOut) {
-		ERC20 bid_token = ERC20(asset0());
+		IERC20 asset0_ = IERC20(asset0());
 
 		require(amountIn > 0, "LetoPool: amount is less then zero");
-		require(bid_token.balanceOf(msg.sender) >= amountIn, "LetoPool: insufficient balance");
-		require(bid_token.allowance(msg.sender, address(this)) >= amountIn, "LetoPool: not approved to transfer");
+		require(asset0_.balanceOf(msg.sender) >= amountIn, "LetoPool: insufficient balance");
+		require(asset0_.allowance(msg.sender, address(this)) >= amountIn, "LetoPool: not approved to transfer");
 
 		amountOut = rate() * amountIn;
 
-		bid_token.transferFrom(msg.sender, address(this), amountIn);
+		asset0_.transferFrom(msg.sender, address(this), amountIn);
 		_token.mint(msg.sender, amountOut);
 
 		emit Deposit(msg.sender, amountIn, amountOut);
@@ -192,7 +215,7 @@ contract LetoPool is LetoPriceConsumer {
 	event Withdrawal(address depositer, uint256 amountIn, uint256 amountOut);
 
 	function redeem(uint256 amountIn) external returns (uint256 amountOut) {
-		ERC20 bid_token = ERC20(asset0());
+		IERC20 asset0_ = IERC20(asset0());
 		ILetoToken pool_token = ILetoToken(token());
 
 		require(amountIn > 0, "LetoPool: the amount can`t be equal to zero");
@@ -201,8 +224,12 @@ contract LetoPool is LetoPriceConsumer {
 
 		amountOut = amountIn / rate();
 
+		require(amountOut <= calculateMaxWithdrawal(), "LetoPool: withdrawal exceeds the maximum possible");
+
+		withdrawCall(asset0(), amountOut);
+
 		pool_token.burn(msg.sender, amountIn);
-		bid_token.transfer(msg.sender, amountOut);
+		asset0_.transfer(msg.sender, amountOut);
 
 		emit Withdrawal(msg.sender, amountIn, amountOut);
 	}
@@ -210,7 +237,7 @@ contract LetoPool is LetoPriceConsumer {
 	// Modifiers
 
 	modifier onlyStrategy() {
-		require(msg.sender == address(_strategy));
+		require(msg.sender == address(_strategy), "LetoPool: call is available only for strategy");
 		_;
 	}
 }

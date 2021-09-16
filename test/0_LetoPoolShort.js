@@ -60,9 +60,7 @@ contract("LetoPool Short", accounts => {
 		await registry.setAddress("USDC", USDC.address, { from: poolOwner })
 		await registry.setAddress("WETH", WETH.address, { from: poolOwner })
 
-		const decimals = (new BN(10)).pow(new BN(18))
 		const initialDeposit = (new BN(1000)).mul((new BN(10)).pow(new BN(USDCDecimals))) // 1000 USDC = 10 L-ETHdown
-
 		await USDC.mint(poolOwner, initialDeposit, { from: poolOwner })
 
 		const poolAddress = "0x" + web3.utils.sha3(encode([deployer.address, 1])).substr(26)
@@ -76,13 +74,13 @@ contract("LetoPool Short", accounts => {
 		const deployArgs = [
 			strategyAdapter.address, poolToken.address,
 			USDC.address, WETH.address,
-			2, //FIXME: add decimals
+			20000, // decimals 4
 			rate,
 			lendingMarketAdapter.address, exchangeAdapter.address,
 			initialDeposit
 		]
 
-		await aggregatorV3Mock.setPrice("315317565712")
+		await aggregatorV3Mock.setPrice("283357945000000")
 
 		await deployer.deployPool(...deployArgs, { from: poolOwner })
 
@@ -98,7 +96,7 @@ contract("LetoPool Short", accounts => {
 		assert.equal(parameters.asset1, WETH.address)
 		assert.equal(parameters.name, "L-ETHdown")
 		assert.equal(parameters.symbol, "L-ETHdown")
-		assert.equal(parameters.target_leverage, "2")
+		assert.equal(parameters.target_leverage, "20000")
 		assert.equal(parameters.rate, rate)
 		assert.equal(parameters.lending_market_adapter, lendingMarketAdapter.address)
 		assert.equal(parameters.exchange_adapter, exchangeAdapter.address)
@@ -189,7 +187,7 @@ contract("LetoPool Short", accounts => {
 		const { token, registry } = await getDeployedContracts()
 		const poolToken = await LetoToken.at(await pool.token())
 
-		await aggregatorV3Mock.setPrice("630635131424")
+		await aggregatorV3Mock.setPrice("141678972500000")
 
 		const aliceBalance = await USDC.balanceOf(alice, { from: alice })
 		const depoitAmount = aliceBalance
@@ -227,7 +225,7 @@ contract("LetoPool Short", accounts => {
 		const { token, registry } = await getDeployedContracts()
 		const poolToken = await LetoToken.at(await pool.token())
 
-		await aggregatorV3Mock.setPrice("157658782856")
+		await aggregatorV3Mock.setPrice("283357945000000")
 
 		const alicePoolTokenBalanceBefore = await poolToken.balanceOf.call(alice, { from: alice })
 

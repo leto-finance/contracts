@@ -6,7 +6,7 @@ contract LetoPriceConsumer {
 	/**
 	* @notice returns the latest price
 	*/
-	function getPrice(address aggregator) internal view returns (int) {
+	function getPrice(address aggregator) public view returns (int) {
 		AggregatorV3Interface priceFeed = AggregatorV3Interface(aggregator);
 		(
 			uint80 roundID,

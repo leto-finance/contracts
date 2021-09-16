@@ -1,12 +1,13 @@
 pragma solidity 0.8.4;
 
 interface ILetoLendingAdapter {
-	function deposit(address asset, uint256 amount, address onBehalfOf) external;
-	function withdraw(address asset, uint256 amount, address to) external;
-	function borrow(address asset, uint256 amount, address onBehalfOf) external;
-	function repay(address asset, uint256 amount, address onBehalfOf) external;
-	function deposited() external view returns (uint256);
-	function ltv(address user) external view returns (uint256);
-	function availableBorrows(address user) external view returns (uint256);
-	function borrowed(address asset, address user) external view returns (uint256);
+	function deposit(address asset, uint256 amount) external;
+	function withdraw(address lending, address asset, uint256 amount) external;
+	function borrow(address lending, address asset, uint256 amount) external;
+	function repay(address asset, uint256 amount) external;
+	function lendingPool() external view returns (address);
+	function deposited(address pool) external view returns (uint256);
+	function ltv(address pool) external view returns (uint256);
+	function availableBorrows(address pool) external view returns (uint256);
+	function borrowed(address pool) external view returns (uint256);
 }

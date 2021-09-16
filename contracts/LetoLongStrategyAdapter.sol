@@ -7,6 +7,8 @@ import "./interfaces/ILetoRegistry.sol";
 contract LetoLongStrategyAdapter {
 	ILetoRegistry public registry;
 
+	int _deviation = 5;
+
 	struct PoolState {
 		ILetoPool.Parameters parameters;
 		uint256 balance0;
@@ -28,14 +30,15 @@ contract LetoLongStrategyAdapter {
 		PoolState memory state = poolState(pool_);
 
 		if (state.balance0 > 0) {
-			uint256 amountOut = swap(pool, state);
-			deposit(pool, poolState(pool_), amountOut);
+			deposit(pool, poolState(pool_), state.balance0);
 		}
 
 		state = poolState(pool_);
 
-		int deviation = int(state.leverage) - int16(state.parameters.target_leverage);
-		int maxDeviation = (int16(state.parameters.target_leverage) / 100) * 5;
+		int deviation;
+		int maxDeviation;
+
+		(deviation, maxDeviation) = calculateTargetLeverageDeviation(pool_, state);
 
 		if (deviation < 0 && (deviation * -1) > maxDeviation) {
 			borrow(pool, poolState(pool_));
@@ -46,80 +49,81 @@ contract LetoLongStrategyAdapter {
 		}
 	}
 
-	event ManualWithdraw(address asset, uint256 amount);
-
-	function manualWithdraw(uint256 _amount) external returns (uint256) {
-		// ILetoPool pool = ILetoPool(msg.sender);
-		// ILetoToken asset1 = ILetoToken(pool.asset1());
-		// ILetoToken bid_token = ILetoToken(pool.bidToken());
-
-		// uint256 _amount_converted = (
-		// 	(_amount * (10 ** asset1.decimals())) /
-		// 	((10 ** asset1.decimals()) / uint256(pool.latestPairPrice())) /
-		// 	(10 ** bid_token.decimals())
-		// );
-
-		// pool.lendingAdapter().withdraw(address(asset1), _amount_converted, address(pool));
-
-		// emit ManualWithdraw(address(bid_token), _amount_converted);
-
-		// return pool.swap(address(pool.asset1()), address(pool.asset0()), _amount_converted, 0); // FIXME: calculate minimal amount out
-	}
-
 	event RebalanceWithdrawalStep(address asset, uint256 amount);
 
 	function withdraw(ILetoPool pool, PoolState memory state) private returns (uint256 amountOut) {
-		uint256 decimals_ = ILetoToken(state.parameters.asset1).decimals();
 		uint256 amount = state.deposited - (state.netValue * state.parameters.target_leverage / 10 ** decimals());
 
-		pool.lendingAdapter().withdraw(address(state.parameters.asset1), amount, address(pool));
-		amountOut = pool.swap(state.parameters.asset1, state.parameters.asset0, amount, 0); // FIXME: calculate minimal amount out
-		pool.repay(state.parameters.asset0, amountOut);
+		pool.withdraw(state.parameters.asset0, amount);
+		amountOut = pool.swap(state.parameters.asset0, state.parameters.asset1, amount, 0); // FIXME: calculate minimal amount out
+		pool.repay(state.parameters.asset1, amountOut);
 
-		emit RebalanceWithdrawalStep(state.parameters.asset0, amountOut);
+		emit RebalanceWithdrawalStep(state.parameters.asset1, amount);
 	}
 
 	event RebalanceSwapStep(address asset0, address asset1, uint256 amountIn, uint256 amountOut);
 
 	function swap(ILetoPool pool, PoolState memory state) private returns (uint256 amountOut) {
-		amountOut = pool.swap(state.parameters.asset0, state.parameters.asset1, state.balance0, 0); // FIXME: calculate minimal amount out
-		emit RebalanceSwapStep(state.parameters.asset0, state.parameters.asset1, state.balance0, amountOut);
+		amountOut = pool.swap(state.parameters.asset1, state.parameters.asset0, state.balance1, 0); // FIXME: calculate minimal amount out
+		emit RebalanceSwapStep(state.parameters.asset1, state.parameters.asset0, state.balance1, amountOut);
 	}
 
 	event RebalanceDepositLendingPoolStep(address asset, uint256 amount);
 
 	function deposit(ILetoPool pool, PoolState memory state, uint256 amount) private returns (bool) {
-		pool.depositToLendingPool(state.parameters.asset1, amount);
-		emit RebalanceDepositLendingPoolStep(state.parameters.asset1, amount);
+		pool.depositToLendingPool(state.parameters.asset0, amount);
+		emit RebalanceDepositLendingPoolStep(state.parameters.asset0, amount);
 	}
 
 	event RebalanceBorrowStep(address asset, uint256 amount);
 
 	function borrow(ILetoPool pool, PoolState memory state) private returns (bool) {
 		uint256 rebalancingAmount_ = calculateRebalancingAmount(state.deposited, state.netValue, state.parameters.target_leverage);
-		uint256 availableBorrows_ = pool.lendingAdapter().availableBorrows(address(pool.lendingAdapter()));
+		uint256 availableBorrows_ = pool.lendingAdapter().availableBorrows(address(pool));
 
 		if (rebalancingAmount_ > availableBorrows_) {
 			rebalancingAmount_ = availableBorrows_;
 		}
 
 		ILetoToken asset0 = ILetoToken(state.parameters.asset0);
-		uint256 amount = rebalancingAmount_ * 10 ** asset0.decimals() / pool.latestPairPrice();
+		ILetoToken asset1 = ILetoToken(state.parameters.asset1);
 
-		pool.borrow(state.parameters.asset0, amount);
+		rebalancingAmount_ = toDecimals(rebalancingAmount_, asset0.decimals(), asset1.decimals() + pool.pairPriceDecimals());
 
-		emit RebalanceBorrowStep(state.parameters.asset0, amount);
+		uint256 amount = rebalancingAmount_ / pool.latestPairPrice();
+
+		pool.borrow(state.parameters.asset1, amount);
+
+		emit RebalanceBorrowStep(state.parameters.asset1, pool.lendingAdapter().borrowed(address(pool)));
+	}
+
+	// Pure
+
+	function toDecimals(uint256 _n, uint256 _d1, uint256 _d2) internal pure returns (uint256) {
+		if (_d1 < _d2) {
+			return _n * 10 ** (_d2 - _d1);
+		} else if (_d1 > _d2) {
+			return _n / 10 ** (_d1 - _d2);
+		}
+
+		return _n;
 	}
 
 	// Getters
+	function calculateTargetLeverageDeviation(address pool_, PoolState memory state) public view returns (int deviation, int maxDeviation) {
+		deviation = int(state.leverage) - int16(state.parameters.target_leverage);
+		maxDeviation = (int16(state.parameters.target_leverage) / 100) * _deviation;
+	}
 
 	function calculateMaxWithdrawal(address pool_) public view returns (uint256) {
 		PoolState memory state = poolState(pool_);
 		uint256 _ltv = ltv(pool_);
 		if (_ltv == 0) { return 0; }
 
-		int deviation = int(state.leverage) - int16(state.parameters.target_leverage);
-		int maxDeviation = (int16(state.parameters.target_leverage) / 100) * 5;
+		int deviation;
+		int maxDeviation;
+
+		(deviation, maxDeviation) = calculateTargetLeverageDeviation(pool_, state);
 
 		if (
 			deviation < 0 && (deviation * -1) > maxDeviation ||
@@ -133,49 +137,32 @@ contract LetoLongStrategyAdapter {
 
 	function ltv(address pool_) public view returns (uint256) {
 		ILetoPool pool = ILetoPool(pool_);
-		return pool.lendingAdapter().ltv(address(pool.lendingAdapter()));
-	}
-
-	function borrowed(address pool_, string memory assetSymbol) public view returns (uint256) {
-		ILetoPool pool = ILetoPool(pool_);
-
-		address dAsset = registry.getAddress(
-			string(abi.encodePacked("Aave:debt_bearing:","stable:", assetSymbol))
-		);
-
-		return pool.lendingAdapter().borrowed(dAsset, address(pool.lendingAdapter()));
+		return pool.lendingAdapter().ltv(address(pool));
 	}
 
 	function poolState(address pool_) public view returns (PoolState memory) {
 		ILetoPool pool = ILetoPool(pool_);
 		ILetoPool.Parameters memory parameters = pool.parameters();
 
-		uint256 latestPairPrice = pool.latestPairPrice();
-
 		ILetoToken asset0 = ILetoToken(parameters.asset0);
 		ILetoToken asset1 = ILetoToken(parameters.asset1);
-
-		uint256 decimals0 = asset0.decimals();
 
 		uint256 balance0 = asset0.balanceOf(pool_);
 		uint256 balance1 = asset1.balanceOf(pool_);
 
-		uint256 borrowedAssets_ = borrowed(pool_, asset0.symbol());
+		uint256 deposited_ = balance0 + pool.lendingAdapter().deposited(address(pool));
+		uint256 borrowedAssets_ = pool.lendingAdapter().borrowed(address(pool));
 
-		uint256 borrowedAssetsConverted = 0; // (borrowedAssets_ * (10 ** poolDecimals)) / ((10 ** poolDecimals) / latestPairPrice) / (10 ** decimals0);
-		uint256 balance0Converted = 0; // (balance0 * (10 ** poolDecimals)) / ((10 ** poolDecimals) / latestPairPrice) / (10 ** decimals0);
-
-		uint256 deposited_ = deposited(balance0Converted, balance1, pool.lendingAdapter().deposited());
-		uint256 netValue_ = netValue(deposited_, borrowedAssetsConverted);
+		uint256 netValue_ = netValue(deposited_, borrowedAssets_);
 
 		return PoolState({
 			parameters: parameters,
-			balance0: balance0,
-			balance1: balance1,
-			deposited: deposited_,
-			borrowed: borrowedAssetsConverted,
-			netValue: netValue_,
-			leverage: leverage(deposited_, netValue_)
+			balance0:   balance0,
+			balance1:   balance1,
+			netValue:   netValue_,
+			deposited:  deposited_,
+			borrowed:   borrowedAssets_,
+			leverage:   leverage(deposited_, netValue_)
 		});
 	}
 
@@ -201,6 +188,7 @@ contract LetoLongStrategyAdapter {
 	}
 
 	function leverage(uint256 deposited_, uint256 netValue_) public view returns (uint256) {
+		if (netValue_ == 0) return 0;
 		return (deposited_ * (10 ** decimals())) / netValue_;
 	}
 
