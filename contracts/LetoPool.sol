@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 pragma solidity 0.8.4;
 
 // Internal contracts
@@ -154,7 +156,7 @@ contract LetoPool is LetoPriceConsumer {
 	event Borrow(address asset, uint256 amount);
 
 	function borrow(address asset, uint256 amount) onlyStrategy external {
-		(bool success, bytes memory data) = address(lendingAdapter()).delegatecall(
+		(bool success,) = address(lendingAdapter()).delegatecall(
 			abi.encodeWithSignature("borrow(address,address,uint256)", lendingAdapter().lendingPool(), asset, amount)
 		);
 
@@ -173,7 +175,7 @@ contract LetoPool is LetoPriceConsumer {
 	event WithdrawFromLendingPool(address asset, uint256 amount);
 
 	function withdrawCall(address asset, uint256 amount) internal {
-		(bool success, bytes memory data) = address(lendingAdapter()).delegatecall(
+		(bool success,) = address(lendingAdapter()).delegatecall(
 			abi.encodeWithSignature("withdraw(address,address,uint256)", lendingAdapter().lendingPool(), asset, amount)
 		);
 

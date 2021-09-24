@@ -1,7 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+
 pragma solidity 0.8.4;
 
 import '@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol';
-import "./../interfaces/ILetoToken.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./../interfaces/ILetoRegistry.sol";
 
 contract LetoUniswapAdapter {
@@ -16,8 +18,8 @@ contract LetoUniswapAdapter {
 	event Swap(address assetIn, address assetOut, uint256 amountIn, uint256 amountOut);
 
 	function swap(address assetIn, address assetOut, uint256 amountIn, uint256 amountOutMinimum) external returns (uint256 amountOut) {
-		ILetoToken(assetIn).transferFrom(msg.sender, address(this), amountIn);
-		ILetoToken(assetIn).approve(address(router), amountIn);
+		IERC20(assetIn).transferFrom(msg.sender, address(this), amountIn);
+		IERC20(assetIn).approve(address(router), amountIn);
 
 		amountOut = router.exactInputSingle(
 			ISwapRouter.ExactInputSingleParams({

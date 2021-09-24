@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 pragma solidity 0.8.4;
 
 import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
@@ -32,7 +34,7 @@ contract AggregatorV3Mock {
 
     function decimals()
       public
-      view
+      pure
       returns (uint8)
     {
       return 8;

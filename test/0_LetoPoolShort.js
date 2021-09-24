@@ -16,7 +16,6 @@ const AggregatorV3Mock = artifacts.require("AggregatorV3Mock")
 const LetoTokenMock = artifacts.require("LetoTokenMock")
 
 async function getDeployedContracts() {
-	const token = await LetoToken.deployed()
 	const registry = await LetoRegistry.deployed()
 	const deployer = await LetoDeployer.deployed()
 	const lendingMarketAdapter = await LetoAaveAdapter.deployed()
@@ -24,7 +23,6 @@ async function getDeployedContracts() {
 	const strategyAdapter = await LetoShortStrategyAdapter.deployed()
 
 	return {
-		token,
 		registry,
 		deployer,
 		lendingMarketAdapter,
@@ -46,7 +44,7 @@ contract("LetoPool Short", accounts => {
 
 	it("should deploy LetoPool with correct parameters", async () => {
 		const [poolOwner] = accounts
-		const { token, registry, deployer, lendingMarketAdapter, exchangeAdapter, strategyAdapter } = await getDeployedContracts()
+		const { registry, deployer, lendingMarketAdapter, exchangeAdapter, strategyAdapter } = await getDeployedContracts()
 
 		USDC =      await LetoTokenMock.new("USD Coin",         "USDC",      USDCDecimals,      { from: poolOwner })
 		WETH =      await LetoTokenMock.new("Wrapped Ethereum", "WETH",      WETHDecimals,      { from: poolOwner })
@@ -104,7 +102,7 @@ contract("LetoPool Short", accounts => {
 
 	it("should mint correct amount of L-ETHdown tokens of pool for USDC deposit", async () => {
 		const [poolOwner, alice, bob] = accounts
-		const { token, registry } = await getDeployedContracts()
+		const { registry } = await getDeployedContracts()
 
 		const poolToken = await LetoToken.at(await pool.token())
 
@@ -148,49 +146,18 @@ contract("LetoPool Short", accounts => {
 		await expectRevert(pool.send(10, { from: alice }), "revert")
 	})
 
-	it("should transfer correnct amount of L-ETHdown to user for USDC tokens", async () => {
-		const [poolOwner, alice] = accounts
-
-		const poolToken = await LetoToken.at(await pool.token())
-		const withdrawalAmount = new BN("1000000000000000000") // 1 * (10 ** 18) = 1 L-ETHdown
-
-		const poolBalanceBeforeWithdrawal = await USDC.balanceOf(pool.address)
-
-		await poolToken.approve(pool.address, withdrawalAmount, { from: alice })
-		await pool.redeem(withdrawalAmount, { from: alice })
-
-		const aliceBalance = await USDC.balanceOf(alice)
-		const poolTokenBalance = await poolToken.balanceOf(alice)
-		const poolBalanceAfterWithdrawal = await USDC.balanceOf(pool.address)
-
-		assert.equal(
-			poolBalanceAfterWithdrawal.toString(),
-			(new BN(1000)).mul((new BN(10)).pow(new BN(USDCDecimals))), // initial deposit amount
-			"Balance USDC isn`t correct"
-		)
-
-		assert.equal(
-			poolTokenBalance.toString(),
-			"0", // 0 L-ETHdown
-			"Balance L-ETHdown isn`t correct"
-		)
-
-		assert.equal(
-			aliceBalance.toString(),
-			(new BN(100)).mul((new BN(10)).pow(new BN(USDCDecimals))), // alice deposit amount
-			"Balance USDC isn`t correct"
-		)
-	})
-
 	it("should mint correct amount of L-ETHup tokens of pool for USDC deposit when WETH price increase x2", async () => {
 		const [poolOwner, alice, bob] = accounts
-		const { token, registry } = await getDeployedContracts()
+		const { registry } = await getDeployedContracts()
 		const poolToken = await LetoToken.at(await pool.token())
 
-		await aggregatorV3Mock.setPrice("141678972500000")
+		await aggregatorV3Mock.setPrice("566715890000000")
 
+		const alicePoolTokenBalanceBefore = await poolToken.balanceOf.call(alice, { from: alice })
+
+		const depoitAmount = (new BN(100)).mul((new BN(10)).pow(new BN(USDCDecimals))) // $100 = 0.5 L-ETHdown
+		await USDC.mint(alice, new BN(depoitAmount), { from: poolOwner })
 		const aliceBalance = await USDC.balanceOf(alice, { from: alice })
-		const depoitAmount = aliceBalance
 
 		assert.equal(
 			aliceBalance.toString(),
@@ -214,18 +181,18 @@ contract("LetoPool Short", accounts => {
 		)
 
 		assert.equal(
-			alicePoolTokenBalance.toString(),
-			(new BN(2)).mul((new BN(10)).pow((await poolToken.decimals()))).toString(), // 2 L-ETHup
+			alicePoolTokenBalance.sub(alicePoolTokenBalanceBefore).toString(),
+			(new BN(2)).mul((new BN(10)).pow(await poolToken.decimals())).toString(), // 2 L-ETHup
 			"Balance L-ETHup isn`t correct"
 		)
 	})
 
 	it("should mint correct amount of L-ETHup tokens of pool for USDC deposit when WETH price decrease x2", async () => {
 		const [poolOwner, alice, bob] = accounts
-		const { token, registry } = await getDeployedContracts()
+		const { registry } = await getDeployedContracts()
 		const poolToken = await LetoToken.at(await pool.token())
 
-		await aggregatorV3Mock.setPrice("283357945000000")
+		await aggregatorV3Mock.setPrice("141678972500000")
 
 		const alicePoolTokenBalanceBefore = await poolToken.balanceOf.call(alice, { from: alice })
 

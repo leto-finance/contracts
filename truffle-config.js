@@ -20,6 +20,8 @@ module.exports = {
       host: "localhost",
       port: 8545,
 			network_id: 1,
+      gasPrice: 50000000000,
+			networkCheckTimeout: 10000,
     }
   },
   compilers: {

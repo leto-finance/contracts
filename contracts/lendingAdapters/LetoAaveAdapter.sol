@@ -1,5 +1,6 @@
-pragma solidity 0.8.4;
+// SPDX-License-Identifier: Apache-2.0
 
+pragma solidity 0.8.4;
 
 import "./../interfaces/ILetoPool.sol";
 import "./../interfaces/IAaveLendingPool.sol";
@@ -64,7 +65,6 @@ contract LetoAaveAdapter {
 		return interest.balanceOf(pool_);
 	}
 
-	// FIXME: add access modifier
 	function borrowed(address pool_) external view returns (uint256) {
 		ILetoPool pool = ILetoPool(pool_);
 		string memory key = string(abi.encodePacked("Aave:debt_bearing:", "stable:", IERC20Metadata(pool.asset1()).symbol()));
@@ -85,10 +85,9 @@ contract LetoAaveAdapter {
 		}
 
 		IERC20Metadata asset1 = IERC20Metadata(pool.asset1());
-		// FIXME: use price feed asset0/ETH, not pairPrice OR calculate it self
-		uint256 availableBorrows = toDecimals(accountData.availableBorrowsETH * pool.latestPairPrice(), asset1.decimals() + pool.pairPriceDecimals(), asset0.decimals());
 
-		return availableBorrows;
+		// FIXME: use price feed asset0/ETH, not pairPrice OR calculate it self
+		return toDecimals(accountData.availableBorrowsETH * pool.latestPairPrice(), asset1.decimals() + pool.pairPriceDecimals(), asset0.decimals());
 	}
 
 	function toDecimals(uint256 _n, uint256 _d1, uint256 _d2) internal pure returns (uint256) {

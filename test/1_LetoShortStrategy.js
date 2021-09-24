@@ -28,7 +28,6 @@ const AAVE_INTEREST_BEARING_WETH = "0x030bA81f1c18d280636F32af80b9AAd02Cf0854e"
 const AAVE_DEBT_BEARING_STABLE_WETH = "0x4e977830ba4bd783C0BB7F15d3e243f73FF57121"
 
 async function getDeployedContracts() {
-	const token = await LetoToken.deployed()
 	const registry = await LetoRegistry.deployed()
 	const deployer = await LetoDeployer.deployed()
 	const lendingMarketAdapter = await LetoAaveAdapter.deployed()
@@ -36,7 +35,6 @@ async function getDeployedContracts() {
 	const strategyAdapter = await LetoShortStrategyAdapter.deployed()
 
 	return {
-		token,
 		registry,
 		deployer,
 		lendingMarketAdapter,
@@ -49,7 +47,7 @@ contract("LetoShortStrategy", accounts => {
 	it("should calculate pool token price according to strategy", async () => {
 		const { BN } = web3.utils
 		const [poolOwner] = accounts
-		const { token, registry, deployer, lendingMarketAdapter, exchangeAdapter, strategyAdapter } = await getDeployedContracts();
+		const { registry, deployer, lendingMarketAdapter, exchangeAdapter, strategyAdapter } = await getDeployedContracts();
 
 		const contract = require('@truffle/contract')
 
@@ -69,9 +67,9 @@ contract("LetoShortStrategy", accounts => {
 					amountOutMinimum: 0,
 					sqrtPriceLimitX96: 0,
 				}, {
-				from: poolOwner,
-				value: web3.utils.toWei("10", "ether")
-			}
+					from: poolOwner,
+					value: web3.utils.toWei("10", "ether")
+				}
 			);
 		}
 
@@ -84,7 +82,6 @@ contract("LetoShortStrategy", accounts => {
 		await poolToken.transferOwnership(deployer.address)
 
 		await registry.setAddress("PriceFeed:L-ETHdown", PRICE_FEED, { from: poolOwner })
-		await registry.setAddress("USDC", USDC.address, { from: poolOwner })
 
 		const decimalsPool = (new BN(10)).pow(await poolToken.decimals())
 		const USDCDecimals = (new BN(10)).pow(await USDC.decimals())
@@ -130,12 +127,12 @@ contract("LetoShortStrategy", accounts => {
 		console.log("availableBorrows", (await lendingMarketAdapter.availableBorrows.call(pool.address)).toString())
 		console.log("maxWithdrawal", (await pool.calculateMaxWithdrawal.call()).toString())
 		console.log("latestPairPrice", (await pool.latestPairPrice.call()).toString())
-		console.log("calculateRebalancingAmount", (await strategyAdapter.calculateRebalancingAmount.call(new BN(poolState.deposited), new BN(poolState.netValue), new BN(poolState.parameters.target_leverage))).toString())
+		// console.log("calculateRebalancingAmount", (await strategyAdapter.calculateRebalancingAmount.call(new BN(poolState.deposited), new BN(poolState.netValue), new BN(poolState.parameters.target_leverage))).toString())
 
 		for (let i = 0; i < 2; i++) {
 			console.log(`\n Rebalancing ${i} \n`)
 
-			await strategyAdapter.rebalance(poolAddress)
+			await strategyAdapter.rebalance(poolAddress, 0, 0)
 
 			console.log("AAVE_INTEREST_BEARING_USDC", (await (await LetoToken.at(AAVE_INTEREST_BEARING_USDC)).balanceOf(poolAddress)).toString())
 			console.log("AAVE_DEBT_BEARING_STABLE_USDC", (await (await LetoToken.at(AAVE_DEBT_BEARING_STABLE_USDC)).balanceOf(poolAddress)).toString())
@@ -158,7 +155,7 @@ contract("LetoShortStrategy", accounts => {
 			console.log("availableBorrows", (await lendingMarketAdapter.availableBorrows.call(pool.address)).toString())
 			console.log("maxWithdrawal", (await pool.calculateMaxWithdrawal.call()).toString())
 			console.log("latestPairPrice", (await pool.latestPairPrice.call()).toString())
-			console.log("calculateRebalancingAmount", (await strategyAdapter.calculateRebalancingAmount.call(new BN(poolState.deposited), new BN(poolState.netValue), new BN(poolState.parameters.target_leverage))).toString())
+			// console.log("calculateRebalancingAmount", (await strategyAdapter.calculateRebalancingAmount.call(new BN(poolState.deposited), new BN(poolState.netValue), new BN(poolState.parameters.target_leverage))).toString())
 		}
 
 		for (let i = 1; i < 3; i++) {
@@ -188,7 +185,7 @@ contract("LetoShortStrategy", accounts => {
 		}
 
 		for (let i = 0; i < 1; i++) {
-			await strategyAdapter.rebalance(poolAddress)
+			await strategyAdapter.rebalance(poolAddress, 0, 0)
 
 			poolState = await strategyAdapter.poolState.call(poolAddress)
 
@@ -245,7 +242,7 @@ contract("LetoShortStrategy", accounts => {
 
 
 		for (let i = 0; i < 1; i++) {
-			await strategyAdapter.rebalance(poolAddress)
+			await strategyAdapter.rebalance(poolAddress, 0, 0)
 
 			poolState = await strategyAdapter.poolState.call(poolAddress)
 
