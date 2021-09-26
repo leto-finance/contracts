@@ -78,17 +78,19 @@ contract("LetoShortStrategy", accounts => {
 
 		const rate = 10000000000 // 100 USDC for 1 L-ETHdown
 
-		const poolToken = await LetoTokenMock.new("L-ETHdown", "L-ETHdown", 6)
+		const poolToken = await LetoTokenMock.new("TEST:L-ETHdown", "TEST:L-ETHdown", 6)
 		await poolToken.transferOwnership(deployer.address)
 
-		await registry.setAddress("PriceFeed:L-ETHdown", PRICE_FEED, { from: poolOwner })
+		await registry.setAddress("PriceFeed:TEST:L-ETHdown", PRICE_FEED, { from: poolOwner })
 
 		const decimalsPool = (new BN(10)).pow(await poolToken.decimals())
 		const USDCDecimals = (new BN(10)).pow(await USDC.decimals())
 
 		const initialDeposit = (new BN(10000)).mul(USDCDecimals) // 10000 USDC = 10 L-ETHdown
 
-		const poolAddress = "0x" + web3.utils.sha3(encode([deployer.address, 1])).substr(26)
+		const nonce = await web3.eth.getTransactionCount(deployer.address)
+		const poolAddress = "0x" + web3.utils.sha3(encode([deployer.address, nonce])).substr(26)
+
 		await USDC.transfer(deployer.address, initialDeposit, { from: poolOwner })
 
 		assert.equal(
@@ -172,7 +174,7 @@ contract("LetoShortStrategy", accounts => {
 			console.log("AAVE_INTEREST_BEARING_WETH", (await (await LetoToken.at(AAVE_INTEREST_BEARING_WETH)).balanceOf(poolAddress)).toString())
 			console.log("AAVE_DEBT_BEARING_STABLE_WETH", (await (await LetoToken.at(AAVE_DEBT_BEARING_STABLE_WETH)).balanceOf(poolAddress)).toString())
 
-			console.log(`L-ETHup Balance of account: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
+			console.log(`L-ETHdown Balance of account: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
 			console.log("USDC Balance", poolState.balance0)
 			console.log("WETH Balance", poolState.balance1)
 			console.log("deposited", poolState.deposited)
@@ -219,7 +221,7 @@ contract("LetoShortStrategy", accounts => {
 			console.log("AAVE_DEBT_BEARING_STABLE_WETH", (await (await LetoToken.at(AAVE_DEBT_BEARING_STABLE_WETH)).balanceOf(poolAddress)).toString())
 
 			console.log(`USDC Balance of account before withdrawal: ${i}`, (await USDC.balanceOf(accounts[i])).toString())
-			console.log(`L-ETHup Balance of account before withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
+			console.log(`L-ETHdown Balance of account before withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
 
 			await poolToken.approve(pool.address, withdrawalAmount, { from: accounts[i] })
 			await pool.redeem(withdrawalAmount, { from: accounts[i] })
@@ -227,7 +229,7 @@ contract("LetoShortStrategy", accounts => {
 			poolState = await strategyAdapter.poolState.call(poolAddress)
 
 			console.log(`USDC Balance of account after withdrawal: ${i}`, (await USDC.balanceOf(accounts[i])).toString())
-			console.log(`L-ETHup Balance of account after withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
+			console.log(`L-ETHdown Balance of account after withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
 
 			console.log("USDC Balance", poolState.balance0)
 			console.log("WETH Balance", poolState.balance1)
@@ -276,7 +278,7 @@ contract("LetoShortStrategy", accounts => {
 		// 	console.log("AAVE_DEBT_BEARING_STABLE_WETH", (await (await LetoToken.at(AAVE_DEBT_BEARING_STABLE_WETH)).balanceOf(poolAddress)).toString())
 
 		// 	console.log(`USDC Balance of account before withdrawal: ${i}`, (await USDC.balanceOf(accounts[i])).toString())
-		// 	console.log(`L-ETHup Balance of account before withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
+		// 	console.log(`L-ETHdown Balance of account before withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
 
 		// 	await poolToken.approve(pool.address, withdrawalAmount, { from: accounts[i] })
 		// 	await pool.redeem(withdrawalAmount, { from: accounts[i] })
@@ -284,7 +286,7 @@ contract("LetoShortStrategy", accounts => {
 		// 	poolState = await strategyAdapter.poolState.call(poolAddress)
 
 		// 	console.log(`USDC Balance of account after withdrawal: ${i}`, (await USDC.balanceOf(accounts[i])).toString())
-		// 	console.log(`L-ETHup Balance of account after withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
+		// 	console.log(`L-ETHdown Balance of account after withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
 
 		// 	console.log("USDC Balance", poolState.balance0)
 		// 	console.log("WETH Balance", poolState.balance1)

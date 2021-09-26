@@ -64,16 +64,17 @@ contract("LetoLongStrategy", accounts => {
 		WETH = await LetoToken.at(WETHAddress)
 		USDC = await LetoToken.at(USDCAddress)
 
-		const poolToken = await LetoTokenMock.new("L-ETHup", "L-ETHup", 24)
+		const poolToken = await LetoTokenMock.new("TEST:L-ETHup", "TEST:L-ETHup", 24)
 		await poolToken.transferOwnership(deployer.address)
 
-		await registry.setAddress("PriceFeed:L-ETHup", PRICE_FEED, { from: poolOwner })
+		await registry.setAddress("PriceFeed:TEST:L-ETHup", PRICE_FEED, { from: poolOwner })
 
 		const decimalsPool = (new BN(10)).pow(await poolToken.decimals())
 		const decimals0 = (new BN(10)).pow(await WETH.decimals())
 		const decimals1 = (new BN(10)).pow(await USDC.decimals())
 
-		const poolAddress = "0x" + web3.utils.sha3(encode([deployer.address, 1])).substr(26)
+		const nonce = await web3.eth.getTransactionCount(deployer.address)
+		const poolAddress = "0x" + web3.utils.sha3(encode([deployer.address, nonce])).substr(26)
 
 		const priceConsumer = await LetoPriceConsumer.new()
 

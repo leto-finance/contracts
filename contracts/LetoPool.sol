@@ -28,6 +28,7 @@ contract LetoPool is LetoPriceConsumer {
 		uint256 rate;
 		address lending_market_adapter;
 		address exchange_adapter;
+		address token;
 	}
 
 	address private _deployer;
@@ -74,7 +75,8 @@ contract LetoPool is LetoPriceConsumer {
 			target_leverage:        target_leverage_,
 			rate:                   pool_token_price_,
 			lending_market_adapter: lending_market_adapter_,
-			exchange_adapter:       exchange_adapter_
+			exchange_adapter:       exchange_adapter_,
+			token:                  pool_token_
 		});
 
 		_priceFeed = _registry.getAddress(string(abi.encodePacked("PriceFeed:", _token.symbol())));

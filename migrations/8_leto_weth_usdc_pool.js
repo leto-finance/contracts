@@ -47,7 +47,7 @@ module.exports = function (deployer, network, accounts) {
 
 		const latestPairPrice = await priceConsumer.getPrice.call(PRICE_FEED)
 		rate = (new BN(10)).pow(new BN(22)).div(latestPairPrice) // 100 USD for 1 L-ETHup
-		const initialDeposit = ((new BN(10)).pow(new BN(24))).div(rate).mul(new BN(100)); // 10000 USD
+		const initialDeposit = ((new BN(10)).pow(new BN(24))).div(rate).mul(new BN(100)); // 10000 USD for 100 L-ETHup
 
 		await WETH.transfer(deployer.address, initialDeposit)
 

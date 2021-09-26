@@ -52,13 +52,13 @@ module.exports = function (deployer, network, accounts) {
 			}
 		);
 
-		const poolToken = await LetoToken.new("L-ETHdown", "L-ETHdown", 24)
+		const poolToken = await LetoToken.new("L-ETHdown", "L-ETHdown", 18)
 		await poolToken.transferOwnership(deployer.address)
 
 		await registry.setAddress("PriceFeed:L-ETHdown", PRICE_FEED)
 
 		const rate = 10000000000 // 100 USDC for 1 L-ETHdown
-		const initialDeposit = (new BN(10000)).mul(USDCDecimals) // 10000 USDC = 10 L-ETHdown
+		const initialDeposit = (new BN(10000)).mul(USDCDecimals) // 10000 USDC = 100 L-ETHdown
 
 		await USDC.transfer(deployer.address, initialDeposit)
 

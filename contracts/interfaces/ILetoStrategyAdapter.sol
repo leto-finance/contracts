@@ -13,6 +13,7 @@ interface ILetoStrategyAdapter {
 		uint256 borrowed;
 		uint256 netValue;
 		uint256 leverage;
+		uint256 totalSupply;
 	}
 
 	// State changing

@@ -133,7 +133,8 @@ abstract contract LetoFlexibleLeverageStrategy is ILetoStrategyAdapter {
 			netValue:   netValue_,
 			deposited:  deposited_,
 			borrowed:   borrowedAssets_,
-			leverage:   leverage(deposited_, netValue_)
+			leverage:   leverage(deposited_, netValue_),
+			totalSupply: IERC20(pool.token()).totalSupply()
 		});
 	}
 

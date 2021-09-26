@@ -15,6 +15,7 @@ interface ILetoPool {
 		uint256 rate;
 		address lending_market_adapter;
 		address exchange_adapter;
+		address token;
 	}
 
 	function exchangeAdapter() external view returns (ILetoExchangeAdapter);

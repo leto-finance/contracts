@@ -48,20 +48,22 @@ contract("LetoPool Short", accounts => {
 
 		USDC =      await LetoTokenMock.new("USD Coin",         "USDC",      USDCDecimals,      { from: poolOwner })
 		WETH =      await LetoTokenMock.new("Wrapped Ethereum", "WETH",      WETHDecimals,      { from: poolOwner })
-		poolToken = await LetoTokenMock.new("L-ETHdown",        "L-ETHdown", poolTokenDecimals, { from: poolOwner })
+		poolToken = await LetoTokenMock.new("TEST:L-ETHdown",   "TEST:L-ETHdown", poolTokenDecimals, { from: poolOwner })
 
 		await poolToken.transferOwnership(deployer.address)
 
 		aggregatorV3Mock = await AggregatorV3Mock.new({ from: poolOwner })
 
-		await registry.setAddress("PriceFeed:L-ETHdown", aggregatorV3Mock.address, { from: poolOwner })
+		await registry.setAddress("PriceFeed:TEST:L-ETHdown", aggregatorV3Mock.address, { from: poolOwner })
 		await registry.setAddress("USDC", USDC.address, { from: poolOwner })
 		await registry.setAddress("WETH", WETH.address, { from: poolOwner })
 
 		const initialDeposit = (new BN(1000)).mul((new BN(10)).pow(new BN(USDCDecimals))) // 1000 USDC = 10 L-ETHdown
 		await USDC.mint(poolOwner, initialDeposit, { from: poolOwner })
 
-		const poolAddress = "0x" + web3.utils.sha3(encode([deployer.address, 1])).substr(26)
+		const nonce = await web3.eth.getTransactionCount(deployer.address)
+		const poolAddress = "0x" + web3.utils.sha3(encode([deployer.address, nonce])).substr(26)
+
 		await USDC.transfer(deployer.address, initialDeposit, { from: poolOwner })
 
 		assert.equal(
@@ -92,8 +94,8 @@ contract("LetoPool Short", accounts => {
 		assert.equal(poolBalance.toString(), initialDeposit.toString())
 		assert.equal(parameters.asset0, USDC.address)
 		assert.equal(parameters.asset1, WETH.address)
-		assert.equal(parameters.name, "L-ETHdown")
-		assert.equal(parameters.symbol, "L-ETHdown")
+		assert.equal(parameters.name, "TEST:L-ETHdown")
+		assert.equal(parameters.symbol, "TEST:L-ETHdown")
 		assert.equal(parameters.target_leverage, "20000")
 		assert.equal(parameters.rate, rate)
 		assert.equal(parameters.lending_market_adapter, lendingMarketAdapter.address)
@@ -146,7 +148,7 @@ contract("LetoPool Short", accounts => {
 		await expectRevert(pool.send(10, { from: alice }), "revert")
 	})
 
-	it("should mint correct amount of L-ETHup tokens of pool for USDC deposit when WETH price increase x2", async () => {
+	it("should mint correct amount of L-ETHdown tokens of pool for USDC deposit when WETH price increase x2", async () => {
 		const [poolOwner, alice, bob] = accounts
 		const { registry } = await getDeployedContracts()
 		const poolToken = await LetoToken.at(await pool.token())
@@ -182,12 +184,12 @@ contract("LetoPool Short", accounts => {
 
 		assert.equal(
 			alicePoolTokenBalance.sub(alicePoolTokenBalanceBefore).toString(),
-			(new BN(2)).mul((new BN(10)).pow(await poolToken.decimals())).toString(), // 2 L-ETHup
-			"Balance L-ETHup isn`t correct"
+			(new BN(2)).mul((new BN(10)).pow(await poolToken.decimals())).toString(), // 2 L-ETHdown
+			"Balance L-ETHdown isn`t correct"
 		)
 	})
 
-	it("should mint correct amount of L-ETHup tokens of pool for USDC deposit when WETH price decrease x2", async () => {
+	it("should mint correct amount of L-ETHdown tokens of pool for USDC deposit when WETH price decrease x2", async () => {
 		const [poolOwner, alice, bob] = accounts
 		const { registry } = await getDeployedContracts()
 		const poolToken = await LetoToken.at(await pool.token())
@@ -223,8 +225,8 @@ contract("LetoPool Short", accounts => {
 
 		assert.equal(
 			alicePoolTokenBalance.sub(alicePoolTokenBalanceBefore).toString(),
-			(new BN(5)).mul((new BN(10)).pow((await poolToken.decimals()).sub(new BN(1)))).toString(), // 0.5 L-ETHup
-			"Balance L-ETHup isn`t correct"
+			(new BN(5)).mul((new BN(10)).pow((await poolToken.decimals()).sub(new BN(1)))).toString(), // 0.5 L-ETHdown
+			"Balance L-ETHdown isn`t correct"
 		)
 	})
 })
