@@ -144,6 +144,11 @@ contract LetoPool is LetoPriceConsumer {
 		return _strategy.calculateMaxWithdrawal(address(this));
 	}
 
+
+	function state() external view returns (ILetoStrategyAdapter.PoolState memory) {
+		return _strategy.poolState(address(this));
+	}
+
 	// State changing
 
 	event Repay(address asset, uint256 amount);

@@ -79,6 +79,8 @@ module.exports = function (deployer, network, accounts) {
 		await deployer.deployPool(...deployArgs)
 		const pool = await LetoPool.at(poolAddress)
 
-		console.log(await pool.parameters.call())
+		console.log("\n========L-ETHup State========\n")
+		console.log(await pool.state.call())
+		console.log("\n=========================== \n")
 	})
 };
