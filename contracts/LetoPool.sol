@@ -157,7 +157,7 @@ contract LetoPool is LetoPriceConsumer {
 
 	function repay(address asset_, uint256 amount) onlyStrategy external {
 		lendingAdapter().repay(asset_, amount);
-		emit Borrow(asset_, amount);
+		emit Repay(asset_, amount);
 	}
 
 	event Borrow(address asset, uint256 amount);
