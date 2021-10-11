@@ -64,9 +64,13 @@ contract("LetoLongStrategy", accounts => {
 		WETH = await LetoToken.at(WETHAddress)
 		USDC = await LetoToken.at(USDCAddress)
 
+		console.log("LetoToken deploy", await LetoToken.new.estimateGas("TEST:L-ETHup", "TEST:L-ETHup", 24))
 		const poolToken = await LetoTokenMock.new("TEST:L-ETHup", "TEST:L-ETHup", 24)
+		console.log("transferOwnership", await poolToken.transferOwnership.estimateGas(deployer.address))
 		await poolToken.transferOwnership(deployer.address)
 
+
+		console.log("setAddress", await registry.setAddress.estimateGas("PriceFeed:TEST:L-ETHup", PRICE_FEED, { from: poolOwner }))
 		await registry.setAddress("PriceFeed:TEST:L-ETHup", PRICE_FEED, { from: poolOwner })
 
 		const decimalsPool = (new BN(10)).pow(await poolToken.decimals())
@@ -84,6 +88,7 @@ contract("LetoLongStrategy", accounts => {
 
 		console.log("INITIAL DEPOSIT: ", initialDeposit.toString())
 
+		console.log("WETH.transfer", await WETH.transfer.estimateGas(deployer.address, initialDeposit, { from: poolOwner }))
 		await WETH.transfer(deployer.address, initialDeposit, { from: poolOwner })
 
 		const deployArgs = [
@@ -95,6 +100,7 @@ contract("LetoLongStrategy", accounts => {
 			initialDeposit
 		]
 
+		console.log("deployer.deployPool", await deployer.deployPool.estimateGas(...deployArgs, { from: poolOwner }))
 		await deployer.deployPool(...deployArgs, { from: poolOwner })
 
 		pool = await LetoPool.at(poolAddress)
@@ -137,11 +143,17 @@ contract("LetoLongStrategy", accounts => {
 		for (let i = 0; i < 2; i++) {
 			console.log(`\n Rebalancing ${i} \n`)
 
+			console.log("StrategyAdapter.rebalance", await strategyAdapter.rebalance.estimateGas(poolAddress,
+				await (await LetoToken.at(AAVE_INTEREST_BEARING_WETH)).balanceOf(poolAddress),
+				await (await LetoToken.at(AAVE_DEBT_BEARING_STABLE_USDC)).balanceOf(poolAddress)
+			))
+
 			await strategyAdapter.rebalance(poolAddress,
 				await (await LetoToken.at(AAVE_INTEREST_BEARING_WETH)).balanceOf(poolAddress),
 				await (await LetoToken.at(AAVE_DEBT_BEARING_STABLE_USDC)).balanceOf(poolAddress)
 			)
 
+			console.log("StrategyAdapter.poolState", await strategyAdapter.poolState.estimateGas(poolAddress))
 			poolState = await strategyAdapter.poolState.call(poolAddress)
 
 			console.log("AAVE_INTEREST_BEARING_WETH", (await (await LetoToken.at(AAVE_INTEREST_BEARING_WETH)).balanceOf(poolAddress)).toString())
@@ -195,6 +207,8 @@ contract("LetoLongStrategy", accounts => {
 
 		for (let i = 0; i < 1; i++) {
 			const { lendingMarketAdapter } = await getDeployedContracts();
+
+			console.log("StrategyAdapter.rebalance", await strategyAdapter.rebalance.estimateGas(poolAddress, 0, 0))
 			await strategyAdapter.rebalance(poolAddress, 0, 0)
 
 			poolState = await strategyAdapter.poolState.call(poolAddress)
@@ -258,6 +272,7 @@ contract("LetoLongStrategy", accounts => {
 		for (let i = 0; i < 1; i++) {
 			const { lendingMarketAdapter } = await getDeployedContracts();
 
+			console.log("StrategyAdapter.rebalance", await strategyAdapter.rebalance.estimateGas(poolAddress, 0, 0))
 			await strategyAdapter.rebalance(poolAddress, 0, 0)
 
 			poolState = await strategyAdapter.poolState.call(poolAddress)

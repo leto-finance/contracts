@@ -209,7 +209,7 @@ contract LetoPool is LetoPriceConsumer {
 	function deposit(uint256 amountIn) external returns (uint256 amountOut) {
 		IERC20 asset0_ = IERC20(asset0());
 
-		require(amountIn > 0, "LetoPool: amount is less then zero");
+		// require(amountIn > 0, "LetoPool: amount is less then zero");
 		require(asset0_.balanceOf(msg.sender) >= amountIn, "LetoPool: insufficient balance");
 		require(asset0_.allowance(msg.sender, address(this)) >= amountIn, "LetoPool: not approved to transfer");
 
@@ -224,10 +224,10 @@ contract LetoPool is LetoPriceConsumer {
 	event Withdrawal(address depositer, uint256 amountIn, uint256 amountOut);
 
 	function redeem(uint256 amountIn) external returns (uint256 amountOut) {
-		IERC20 asset0_ = IERC20(asset0());
+		require(amountIn > 0, "LetoPool: the amount can`t be equal to zero");
+
 		ILetoToken pool_token = ILetoToken(token());
 
-		require(amountIn > 0, "LetoPool: the amount can`t be equal to zero");
 		require(pool_token.balanceOf(msg.sender) >= amountIn, "LetoPool: insufficient balance");
 		require(_token.allowance(msg.sender, address(this)) >= amountIn, "LetoPool: not approved to transfer");
 
@@ -235,10 +235,9 @@ contract LetoPool is LetoPriceConsumer {
 
 		require(amountOut <= calculateMaxWithdrawal(), "LetoPool: withdrawal exceeds the maximum possible");
 
-		withdrawCall(asset0(), amountOut);
-
 		pool_token.burn(msg.sender, amountIn);
-		asset0_.transfer(msg.sender, amountOut);
+		withdrawCall(asset0(), amountOut);
+		IERC20(asset0()).transfer(msg.sender, amountOut);
 
 		emit Withdrawal(msg.sender, amountIn, amountOut);
 	}

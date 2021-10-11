@@ -134,6 +134,7 @@ contract("LetoShortStrategy", accounts => {
 		for (let i = 0; i < 2; i++) {
 			console.log(`\n Rebalancing ${i} \n`)
 
+			console.log("StrategyAdapter.rebalance", await strategyAdapter.rebalance.estimateGas(poolAddress, 0, 0))
 			await strategyAdapter.rebalance(poolAddress, 0, 0)
 
 			console.log("AAVE_INTEREST_BEARING_USDC", (await (await LetoToken.at(AAVE_INTEREST_BEARING_USDC)).balanceOf(poolAddress)).toString())
@@ -163,6 +164,7 @@ contract("LetoShortStrategy", accounts => {
 		for (let i = 1; i < 3; i++) {
 			const depoitAmount = (new BN(1000)).mul(USDCDecimals) // 1.000 USDC
 			await USDC.approve(pool.address, depoitAmount, { from: accounts[i] })
+			console.log("Pool.deposit", await pool.deposit.estimateGas(depoitAmount, { from: accounts[i] }))
 			await pool.deposit(depoitAmount, { from: accounts[i] })
 
 			console.log(`\n Deposit ${i} \n`)
@@ -187,6 +189,7 @@ contract("LetoShortStrategy", accounts => {
 		}
 
 		for (let i = 0; i < 1; i++) {
+			console.log("StrategyAdapter.rebalance", await strategyAdapter.rebalance.estimateGas(poolAddress, 0, 0))
 			await strategyAdapter.rebalance(poolAddress, 0, 0)
 
 			poolState = await strategyAdapter.poolState.call(poolAddress)
@@ -224,6 +227,7 @@ contract("LetoShortStrategy", accounts => {
 			console.log(`L-ETHdown Balance of account before withdrawal: ${i}`, (await poolToken.balanceOf(accounts[i])).toString())
 
 			await poolToken.approve(pool.address, withdrawalAmount, { from: accounts[i] })
+			console.log("Pool.redeem", await pool.redeem.estimateGas(withdrawalAmount, { from: accounts[i] }))
 			await pool.redeem(withdrawalAmount, { from: accounts[i] })
 
 			poolState = await strategyAdapter.poolState.call(poolAddress)
@@ -244,6 +248,7 @@ contract("LetoShortStrategy", accounts => {
 
 
 		for (let i = 0; i < 1; i++) {
+			console.log("StrategyAdapter.rebalance", await strategyAdapter.rebalance.estimateGas(poolAddress, 0, 0))
 			await strategyAdapter.rebalance(poolAddress, 0, 0)
 
 			poolState = await strategyAdapter.poolState.call(poolAddress)
